@@ -1,5 +1,5 @@
 class ApiClient {
-  static baseUrl = 'http://localhost:8000/api/v1';
+  static baseUrl = 'http://187.77.189.31:7000/api/v1';
   
   constructor() {
     this.token = null;
