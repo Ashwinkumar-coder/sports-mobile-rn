@@ -112,6 +112,8 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
               <CoachDashboard
                 data={data}
                 notifications={notifications}
+                tournaments={tournaments}
+                apiClient={apiClient}
               />
             )}
             {user.role === 'sponsor' && (

@@ -7,6 +7,7 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import ScoringScreen from './ScoringScreen';
 
@@ -27,6 +28,10 @@ const ScorerDashboard = ({
   const [wickets, setWickets] = useState(0);
   const [overs, setOvers] = useState(0.0);
   const [balls, setBalls] = useState(0); // tracks balls in current over
+
+  // Completed Match Details States
+  const [selectedCompletedMatch, setSelectedCompletedMatch] = useState(null);
+  const [matchDetailsTab, setMatchDetailsTab] = useState('Summary'); // 'Summary', 'Scorecard'
 
   // Applications States
   const [applying, setApplying] = useState(false);
@@ -71,8 +76,33 @@ const ScorerDashboard = ({
     }
   };
 
-  const startScoring = (match) => {
-    setActiveMatch(match);
+  const startScoring = async (match) => {
+    if (match.status === 'completed') {
+      // Fetch detailed completed match first so we have the rosters & full details!
+      try {
+        const fullMatch = await apiClient.request(`${apiClient.constructor.baseUrl}/matches/${match.id}`);
+        if (fullMatch && !fullMatch.detail) {
+          setSelectedCompletedMatch(fullMatch);
+        } else {
+          setSelectedCompletedMatch(match);
+        }
+      } catch (e) {
+        setSelectedCompletedMatch(match);
+      }
+      setMatchDetailsTab('Summary');
+      return;
+    }
+
+    try {
+      const fullMatch = await apiClient.request(`${apiClient.constructor.baseUrl}/matches/${match.id}`);
+      if (fullMatch && !fullMatch.detail) {
+        setActiveMatch(fullMatch);
+      } else {
+        setActiveMatch(match);
+      }
+    } catch (e) {
+      setActiveMatch(match);
+    }
     setRuns(0);
     setWickets(0);
     setOvers(0.0);
@@ -285,6 +315,123 @@ const ScorerDashboard = ({
           ))
         )}
       </View>
+
+      {/* Match Details Modal (Summary, Scorecard) */}
+      <Modal
+        visible={selectedCompletedMatch !== null}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSelectedCompletedMatch(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Match Analytics</Text>
+              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setSelectedCompletedMatch(null)}>
+                <Text style={styles.modalCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {selectedCompletedMatch && (
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTeamsSubTitle}>
+                  {selectedCompletedMatch.team_a_name} vs {selectedCompletedMatch.team_b_name}
+                </Text>
+
+                {/* Modal Sub-Tabs */}
+                <View style={styles.modalTabBar}>
+                  {['Summary', 'Scorecard'].map((tab) => (
+                    <TouchableOpacity
+                      key={tab}
+                      style={[
+                        styles.modalTabButton,
+                        matchDetailsTab === tab && styles.modalTabButtonActive,
+                      ]}
+                      onPress={() => setMatchDetailsTab(tab)}
+                    >
+                      <Text
+                        style={[
+                          styles.modalTabButtonText,
+                          matchDetailsTab === tab && styles.modalTabButtonTextActive,
+                        ]}
+                      >
+                        {tab}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <ScrollView style={{ flex: 1, marginTop: 12 }}>
+                  {matchDetailsTab === 'Summary' && (
+                    <View style={styles.summaryContainer}>
+                      <View style={styles.summaryStatusBox}>
+                        <Text style={styles.summaryStatusTitle}>Match Status</Text>
+                        <Text style={styles.summaryStatusVal}>
+                          {selectedCompletedMatch.status?.toUpperCase() || 'COMPLETED'}
+                        </Text>
+                      </View>
+                      
+                      <View style={styles.summaryStatItem}>
+                        <Text style={styles.summaryLabel}>Score Board</Text>
+                        <View style={{ marginTop: 8 }}>
+                          <Text style={styles.summaryVal}>
+                            🏏 {selectedCompletedMatch.team_a_name || selectedCompletedMatch.team_a?.name || 'Team A'}: {selectedCompletedMatch.team_a_runs ?? 0} / {selectedCompletedMatch.team_a_wickets ?? 0} ({selectedCompletedMatch.team_a_overs ?? 0.0} ov)
+                          </Text>
+                          <Text style={styles.summaryVal}>
+                            🏏 {selectedCompletedMatch.team_b_name || selectedCompletedMatch.team_b?.name || 'Team B'}: {selectedCompletedMatch.team_b_runs ?? 0} / {selectedCompletedMatch.team_b_wickets ?? 0} ({selectedCompletedMatch.team_b_overs ?? 0.0} ov)
+                          </Text>
+                        </View>
+                      </View>
+
+                      {selectedCompletedMatch.winner && (
+                        <View style={styles.summaryStatItem}>
+                          <Text style={styles.summaryLabel}>Winner</Text>
+                          <Text style={[styles.summaryVal, { fontWeight: 'bold', color: '#2E7D32' }]}>
+                            🏆 {selectedCompletedMatch.winner.name || selectedCompletedMatch.winner_name || 'Won'}
+                          </Text>
+                        </View>
+                      )}
+
+                      <View style={styles.summaryStatItem}>
+                        <Text style={styles.summaryLabel}>Tournament</Text>
+                        <Text style={styles.summaryVal}>{selectedCompletedMatch.tournamentName || selectedCompletedMatch.tournament?.name}</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {matchDetailsTab === 'Scorecard' && (
+                    <View style={styles.scorecardContainer}>
+                      <Text style={styles.scorecardTeamTitle}>{selectedCompletedMatch.team_a?.name || selectedCompletedMatch.team_a_name || 'Team A'} Roster</Text>
+                      <View style={{ marginBottom: 12, paddingLeft: 4 }}>
+                        {(selectedCompletedMatch.team_a?.players || []).map((p, idx) => (
+                          <Text key={idx} style={{ fontSize: 13, color: '#000', marginVertical: 4 }}>
+                            👤 {p.player?.full_name || p.player?.email || 'Unknown Player'}
+                          </Text>
+                        ))}
+                        {(!selectedCompletedMatch.team_a?.players || selectedCompletedMatch.team_a.players.length === 0) && (
+                          <Text style={{ fontSize: 13, color: '#888', fontStyle: 'italic' }}>No registered players.</Text>
+                        )}
+                      </View>
+
+                      <Text style={styles.scorecardTeamTitle}>{selectedCompletedMatch.team_b?.name || selectedCompletedMatch.team_b_name || 'Team B'} Roster</Text>
+                      <View style={{ paddingLeft: 4 }}>
+                        {(selectedCompletedMatch.team_b?.players || []).map((p, idx) => (
+                          <Text key={idx} style={{ fontSize: 13, color: '#000', marginVertical: 4 }}>
+                            👤 {p.player?.full_name || p.player?.email || 'Unknown Player'}
+                          </Text>
+                        ))}
+                        {(!selectedCompletedMatch.team_b?.players || selectedCompletedMatch.team_b.players.length === 0) && (
+                          <Text style={{ fontSize: 13, color: '#888', fontStyle: 'italic' }}>No registered players.</Text>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
@@ -638,6 +785,117 @@ const styles = StyleSheet.create({
   dropdownItemText: {
     color: '#000000',
     fontSize: 14,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 20,
+    height: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderColor: '#E0E0E0',
+    paddingBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000000',
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  modalCloseBtnText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000000',
+  },
+  modalTeamsSubTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#333333',
+    marginVertical: 10,
+    textAlign: 'center',
+  },
+  modalTabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderColor: '#EEEEEE',
+    marginBottom: 8,
+  },
+  modalTabButton: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  modalTabButtonActive: {
+    borderBottomWidth: 2,
+    borderColor: '#000000',
+  },
+  modalTabButtonText: {
+    fontSize: 12,
+    color: '#888888',
+    fontWeight: 'bold',
+  },
+  modalTabButtonTextActive: {
+    color: '#000000',
+  },
+  summaryContainer: {
+    paddingVertical: 10,
+  },
+  summaryStatusBox: {
+    borderWidth: 1,
+    borderColor: '#000000',
+    padding: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  summaryStatusTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#888888',
+    textTransform: 'uppercase',
+  },
+  summaryStatusVal: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000000',
+    marginTop: 4,
+  },
+  summaryStatItem: {
+    marginBottom: 16,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#888888',
+    textTransform: 'uppercase',
+  },
+  summaryVal: {
+    fontSize: 14,
+    color: '#000000',
+    marginTop: 4,
+  },
+  scorecardContainer: {
+    paddingVertical: 10,
+  },
+  scorecardTeamTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#000000',
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderColor: '#000000',
+    paddingBottom: 4,
   },
 });
 

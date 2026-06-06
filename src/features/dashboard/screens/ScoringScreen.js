@@ -88,6 +88,7 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
 
   const [extraModalVisible, setExtraModalVisible] = useState(false);
   const [pendingExtraType, setPendingExtraType] = useState(null);
+  const [playerStats, setPlayerStats] = useState({});
 
   // Initialize openers on step change
   useEffect(() => {
@@ -128,6 +129,7 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
         runs1Score,
         wickets1Score,
         overs1Score,
+        playerStats: JSON.parse(JSON.stringify(playerStats)),
       };
       return [...prev, newState].slice(-10);
     });
@@ -149,6 +151,7 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
     setRuns1Score(lastState.runs1Score);
     setWickets1Score(lastState.wickets1Score);
     setOvers1Score(lastState.overs1Score);
+    setPlayerStats(lastState.playerStats || {});
 
     setHistoryStack((prev) => prev.slice(0, -1));
 
@@ -229,6 +232,55 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
 
     setRuns(newRuns);
     setWickets(newWickets);
+
+    // Update playerStats state
+    setPlayerStats((prev) => {
+      const next = { ...prev };
+      
+      // Initialize striker if not exists
+      if (striker) {
+        if (!next[striker]) {
+          next[striker] = { runs: 0, balls: 0, fours: 0, sixes: 0, ballsConceded: 0, runsConceded: 0, wickets: 0 };
+        }
+        const st = { ...next[striker] };
+        if (isLegalDelivery) {
+          st.balls += 1;
+        }
+        if (type === 'run') {
+          st.runs += value;
+          if (value === 4) st.fours += 1;
+          if (value === 6) st.sixes += 1;
+        }
+        next[striker] = st;
+      }
+
+      // Initialize nonStriker if not exists
+      if (nonStriker && !next[nonStriker]) {
+        next[nonStriker] = { runs: 0, balls: 0, fours: 0, sixes: 0, ballsConceded: 0, runsConceded: 0, wickets: 0 };
+      }
+
+      // Initialize bowler if not exists
+      if (bowler) {
+        if (!next[bowler]) {
+          next[bowler] = { runs: 0, balls: 0, fours: 0, sixes: 0, ballsConceded: 0, runsConceded: 0, wickets: 0 };
+        }
+        const bw = { ...next[bowler] };
+        if (isLegalDelivery) {
+          bw.ballsConceded += 1;
+        }
+        if (type === 'run') {
+          bw.runsConceded += value;
+        } else if (type === 'wide' || type === 'noball') {
+          bw.runsConceded += (1 + value);
+        }
+        if (isWicket && dismissalType !== 'Run Out') {
+          bw.wickets += 1;
+        }
+        next[bowler] = bw;
+      }
+
+      return next;
+    });
 
     let finalOvers = overs;
     let finalBalls = balls;
@@ -485,6 +537,23 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
     );
   }
 
+  const getBatsmanStats = (name) => {
+    if (!name) return '0 (0) | 4s: 0 | 6s: 0 | SR: 0.0';
+    const stats = playerStats[name] || { runs: 0, balls: 0, fours: 0, sixes: 0 };
+    const sr = stats.balls > 0 ? ((stats.runs / stats.balls) * 100).toFixed(1) : '0.0';
+    return `${stats.runs} (${stats.balls}) | 4s: ${stats.fours} | 6s: ${stats.sixes} | SR: ${sr}`;
+  };
+
+  const getBowlerStats = (name) => {
+    if (!name) return '0.0 ov | 0 R | 0 W | Econ: 0.00';
+    const stats = playerStats[name] || { ballsConceded: 0, runsConceded: 0, wickets: 0 };
+    const ov = Math.floor(stats.ballsConceded / 6);
+    const bl = stats.ballsConceded % 6;
+    const oversConceded = `${ov}.${bl}`;
+    const econ = stats.ballsConceded > 0 ? ((stats.runsConceded / (stats.ballsConceded / 6))).toFixed(2) : '0.00';
+    return `${oversConceded} ov | ${stats.runsConceded} R | ${stats.wickets} W | Econ: ${econ}`;
+  };
+
   // STEP 4: Live scoring view
   return (
     <ScrollView style={styles.container}>
@@ -517,21 +586,32 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
           <Text style={styles.partnerRole}>🏏 Batting Team:</Text>
           <Text style={styles.partnerName}>{activeBattingTeam}</Text>
         </View>
-        <View style={styles.partnerRow}>
-          <Text style={styles.partnerRole}>🏏 Striker:</Text>
-          <TouchableOpacity onPress={() => setBatsmanModalVisible(true)}>
-            <Text style={styles.partnerName}>{striker} *</Text>
-          </TouchableOpacity>
+        <View style={styles.partnerRowContainer}>
+          <View style={styles.partnerMainRow}>
+            <Text style={styles.partnerRole}>🏏 Striker:</Text>
+            <TouchableOpacity onPress={() => setBatsmanModalVisible(true)}>
+              <Text style={[styles.partnerName, { textDecorationLine: 'underline' }]}>{striker} *</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.playerStatsSub}>{getBatsmanStats(striker)}</Text>
         </View>
-        <View style={styles.partnerRow}>
-          <Text style={styles.partnerRole}>🏏 Non-Striker:</Text>
-          <Text style={styles.partnerName}>{nonStriker}</Text>
+
+        <View style={styles.partnerRowContainer}>
+          <View style={styles.partnerMainRow}>
+            <Text style={styles.partnerRole}>🏏 Non-Striker:</Text>
+            <Text style={styles.partnerName}>{nonStriker}</Text>
+          </View>
+          <Text style={styles.playerStatsSub}>{getBatsmanStats(nonStriker)}</Text>
         </View>
-        <View style={styles.partnerRow}>
-          <Text style={styles.partnerRole}>🥎 Bowler:</Text>
-          <TouchableOpacity onPress={() => setBowlerModalVisible(true)}>
-            <Text style={styles.partnerName}>{bowler}</Text>
-          </TouchableOpacity>
+
+        <View style={styles.partnerRowContainer}>
+          <View style={styles.partnerMainRow}>
+            <Text style={styles.partnerRole}>🥎 Bowler:</Text>
+            <TouchableOpacity onPress={() => setBowlerModalVisible(true)}>
+              <Text style={[styles.partnerName, { textDecorationLine: 'underline' }]}>{bowler}</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.playerStatsSub}>{getBowlerStats(bowler)}</Text>
         </View>
       </View>
 
@@ -595,9 +675,15 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
               style={styles.wagonField}
               activeOpacity={0.8}
               onPress={(e) => {
-                const { locationX, locationY } = e.nativeEvent;
+                const nativeEv = e.nativeEvent || {};
+                let locationX = nativeEv.locationX !== undefined ? nativeEv.locationX : nativeEv.offsetX;
+                let locationY = nativeEv.locationY !== undefined ? nativeEv.locationY : nativeEv.offsetY;
+
+                if (locationX === undefined || isNaN(locationX)) locationX = 90;
+                if (locationY === undefined || isNaN(locationY)) locationY = 90;
+
                 const angle = Math.round((Math.atan2(locationY - 90, locationX - 90) * 180) / Math.PI);
-                const normalizedAngle = (angle + 360) % 360;
+                const normalizedAngle = isNaN(angle) ? 0 : (angle + 360) % 360;
                 setTouchAngle(normalizedAngle);
                 setIsTouched(true);
                 setTouchPos({ x: locationX, y: locationY });
@@ -1189,6 +1275,22 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 320,
     alignItems: 'center',
+  },
+  partnerRowContainer: {
+    borderBottomWidth: 1,
+    borderColor: '#EEEEEE',
+    paddingVertical: 8,
+  },
+  partnerMainRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  playerStatsSub: {
+    fontSize: 12,
+    color: '#555555',
+    fontFamily: 'Courier',
+    marginTop: 4,
   },
 });
 

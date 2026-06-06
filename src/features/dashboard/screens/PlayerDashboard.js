@@ -475,74 +475,57 @@ const PlayerDashboard = ({
                       </View>
                       
                       <View style={styles.summaryStatItem}>
-                        <Text style={styles.summaryLabel}>Score Summary</Text>
-                        <Text style={styles.summaryVal}>
-                          {selectedMatch.score_summary || 'No score recorded yet.'}
-                        </Text>
+                        <Text style={styles.summaryLabel}>Score Board</Text>
+                        <View style={{ marginTop: 8 }}>
+                          <Text style={styles.summaryVal}>
+                            🏏 {selectedMatch.team_a_name || selectedMatch.team_a?.name || 'Team A'}: {selectedMatch.team_a_runs ?? 0} / {selectedMatch.team_a_wickets ?? 0} ({selectedMatch.team_a_overs ?? 0.0} ov)
+                          </Text>
+                          <Text style={styles.summaryVal}>
+                            🏏 {selectedMatch.team_b_name || selectedMatch.team_b?.name || 'Team B'}: {selectedMatch.team_b_runs ?? 0} / {selectedMatch.team_b_wickets ?? 0} ({selectedMatch.team_b_overs ?? 0.0} ov)
+                          </Text>
+                        </View>
                       </View>
+
+                      {selectedMatch.winner && (
+                        <View style={styles.summaryStatItem}>
+                          <Text style={styles.summaryLabel}>Winner</Text>
+                          <Text style={[styles.summaryVal, { fontWeight: 'bold', color: '#2E7D32' }]}>
+                            🏆 {selectedMatch.winner.name || selectedMatch.winner_name || 'Won'}
+                          </Text>
+                        </View>
+                      )}
 
                       <View style={styles.summaryStatItem}>
                         <Text style={styles.summaryLabel}>Tournament</Text>
-                        <Text style={styles.summaryVal}>{selectedMatch.tournamentName}</Text>
+                        <Text style={styles.summaryVal}>{selectedMatch.tournamentName || selectedMatch.tournament?.name}</Text>
                       </View>
                     </View>
                   )}
 
                   {matchDetailsTab === 'Scorecard' && (
                     <View style={styles.scorecardContainer}>
-                      <Text style={styles.scorecardTeamTitle}>{selectedMatch.team_a_name} Innings</Text>
-                      <View style={styles.tableHeader}>
-                        <Text style={[styles.colName, styles.bold]}>Batsman</Text>
-                        <Text style={[styles.colVal, styles.bold]}>R</Text>
-                        <Text style={[styles.colVal, styles.bold]}>B</Text>
-                        <Text style={[styles.colVal, styles.bold]}>4s</Text>
-                        <Text style={[styles.colVal, styles.bold]}>6s</Text>
-                      </View>
-                      <View style={styles.tableRow}>
-                        <Text style={styles.colName}>Asha (c)</Text>
-                        <Text style={styles.colVal}>48</Text>
-                        <Text style={styles.colVal}>32</Text>
-                        <Text style={styles.colVal}>5</Text>
-                        <Text style={styles.colVal}>2</Text>
-                      </View>
-                      <View style={styles.tableRow}>
-                        <Text style={styles.colName}>Ashwin</Text>
-                        <Text style={styles.colVal}>36</Text>
-                        <Text style={styles.colVal}>24</Text>
-                        <Text style={styles.colVal}>4</Text>
-                        <Text style={styles.colVal}>1</Text>
-                      </View>
-                      <View style={styles.tableRow}>
-                        <Text style={styles.colName}>Extras</Text>
-                        <Text style={styles.colVal}>8</Text>
-                        <Text style={styles.colVal}>-</Text>
-                        <Text style={styles.colVal}>-</Text>
-                        <Text style={styles.colVal}>-</Text>
+                      <Text style={styles.scorecardTeamTitle}>{selectedMatch.team_a?.name || selectedMatch.team_a_name || 'Team A'} Roster</Text>
+                      <View style={{ marginBottom: 12, paddingLeft: 4 }}>
+                        {(selectedMatch.team_a?.players || []).map((p, idx) => (
+                          <Text key={idx} style={{ fontSize: 13, color: '#000', marginVertical: 4 }}>
+                            👤 {p.player?.full_name || p.player?.email || 'Unknown Player'}
+                          </Text>
+                        ))}
+                        {(!selectedMatch.team_a?.players || selectedMatch.team_a.players.length === 0) && (
+                          <Text style={{ fontSize: 13, color: '#888', fontStyle: 'italic' }}>No registered players.</Text>
+                        )}
                       </View>
 
-                      <Text style={[styles.scorecardTeamTitle, { marginTop: 20 }]}>
-                        {selectedMatch.team_b_name} Innings
-                      </Text>
-                      <View style={styles.tableHeader}>
-                        <Text style={[styles.colName, styles.bold]}>Batsman</Text>
-                        <Text style={[styles.colVal, styles.bold]}>R</Text>
-                        <Text style={[styles.colVal, styles.bold]}>B</Text>
-                        <Text style={[styles.colVal, styles.bold]}>4s</Text>
-                        <Text style={[styles.colVal, styles.bold]}>6s</Text>
-                      </View>
-                      <View style={styles.tableRow}>
-                        <Text style={styles.colName}>Sanjay</Text>
-                        <Text style={styles.colVal}>14</Text>
-                        <Text style={styles.colVal}>18</Text>
-                        <Text style={styles.colVal}>1</Text>
-                        <Text style={styles.colVal}>0</Text>
-                      </View>
-                      <View style={styles.tableRow}>
-                        <Text style={styles.colName}>Rahul</Text>
-                        <Text style={styles.colVal}>65</Text>
-                        <Text style={styles.colVal}>41</Text>
-                        <Text style={styles.colVal}>7</Text>
-                        <Text style={styles.colVal}>3</Text>
+                      <Text style={styles.scorecardTeamTitle}>{selectedMatch.team_b?.name || selectedMatch.team_b_name || 'Team B'} Roster</Text>
+                      <View style={{ paddingLeft: 4 }}>
+                        {(selectedMatch.team_b?.players || []).map((p, idx) => (
+                          <Text key={idx} style={{ fontSize: 13, color: '#000', marginVertical: 4 }}>
+                            👤 {p.player?.full_name || p.player?.email || 'Unknown Player'}
+                          </Text>
+                        ))}
+                        {(!selectedMatch.team_b?.players || selectedMatch.team_b.players.length === 0) && (
+                          <Text style={{ fontSize: 13, color: '#888', fontStyle: 'italic' }}>No registered players.</Text>
+                        )}
                       </View>
                     </View>
                   )}
