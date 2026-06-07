@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Animated,
+  Easing,
 } from 'react-native';
 
 const ROLES = [
@@ -26,6 +28,47 @@ const AuthScreen = ({ apiClient, onLoginSuccess }) => {
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+
+  // Animation Refs
+  const buttonScale = useRef(new Animated.Value(1)).current;
+  const toggleOpacity = useRef(new Animated.Value(1)).current;
+  const formHeightAnim = useRef(new Animated.Value(1)).current; // For smooth sizing switch
+
+  const handlePressIn = () => {
+    Animated.spring(buttonScale, {
+      toValue: 0.95,
+      tension: 150,
+      friction: 8,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(buttonScale, {
+      toValue: 1,
+      tension: 150,
+      friction: 8,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handleToggleMode = () => {
+    // Fade and switch registration fields smoothly
+    Animated.timing(toggleOpacity, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(() => {
+      setIsLogin(!isLogin);
+      setMessage(null);
+      setError(null);
+      Animated.timing(toggleOpacity, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    });
+  };
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -74,136 +117,148 @@ const AuthScreen = ({ apiClient, onLoginSuccess }) => {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.card}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.icon}>🏏</Text>
-          <Text style={styles.title}>SPORTS CRICKET</Text>
+          <Text style={styles.title}>⚡ SPORTS APP</Text>
         </View>
-        <Text style={styles.subtitle}>Mobile Integration Scaffold (React Native)</Text>
 
         {/* Message Banner */}
         {message && (
           <View style={styles.successBox}>
-            <Text style={styles.successText}>{message}</Text>
+            <Text style={styles.successText}>✓ {message}</Text>
           </View>
         )}
 
         {/* Error Banner */}
         {error && (
           <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{error}</Text>
+            <Text style={styles.errorText}>⚠ {error}</Text>
           </View>
         )}
 
-        {/* Input Fields */}
-        {!isLogin && (
+        {/* Animated Form Content */}
+        <Animated.View style={{ opacity: toggleOpacity }}>
+          {/* Input Fields */}
+          {!isLogin && (
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Full Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter full name"
+                placeholderTextColor="#666"
+                value={name}
+                onChangeText={setName}
+              />
+            </View>
+          )}
+
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Full Name</Text>
+            <Text style={styles.inputLabel}>Email Address</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter full name"
-              placeholderTextColor="#555"
-              value={name}
-              onChangeText={setName}
+              placeholder="Enter email address"
+              placeholderTextColor="#666"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
             />
           </View>
-        )}
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Email Address</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter email address"
-            placeholderTextColor="#555"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
-          />
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter password"
-            placeholderTextColor="#555"
-            secureTextEntry
-            autoCapitalize="none"
-            value={password}
-            onChangeText={setPassword}
-          />
-        </View>
-
-        {/* Custom Role Picker (only for registration) */}
-        {!isLogin && (
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>System Role</Text>
-            <TouchableOpacity
-              style={styles.dropdownButton}
-              onPress={() => setShowRoleDropdown(!showRoleDropdown)}
-            >
-              <Text style={styles.dropdownButtonText}>{getSelectedRoleLabel()}</Text>
-              <Text style={styles.dropdownArrow}>{showRoleDropdown ? '▲' : '▼'}</Text>
-            </TouchableOpacity>
-
-            {showRoleDropdown && (
-              <View style={styles.dropdownMenu}>
-                {ROLES.map((r) => (
-                  <TouchableOpacity
-                    key={r.value}
-                    style={[
-                      styles.dropdownItem,
-                      role === r.value && styles.dropdownItemActive,
-                    ]}
-                    onPress={() => {
-                      setRole(r.value);
-                      setShowRoleDropdown(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownItemText,
-                        role === r.value && styles.dropdownItemTextActive,
-                      ]}
-                    >
-                      {r.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+            <Text style={styles.inputLabel}>Password</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter password"
+              placeholderTextColor="#666"
+              secureTextEntry
+              autoCapitalize="none"
+              value={password}
+              onChangeText={setPassword}
+            />
           </View>
-        )}
 
-        {/* Submit Button */}
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#000" />
-          ) : (
-            <Text style={styles.buttonText}>{isLogin ? 'LOG IN' : 'REGISTER'}</Text>
+          {/* Custom Role Picker (only for registration) */}
+          {!isLogin && (
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>System Role</Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.dropdownButton}
+                onPress={() => setShowRoleDropdown(!showRoleDropdown)}
+              >
+                <Text style={styles.dropdownButtonText}>{getSelectedRoleLabel()}</Text>
+                <Text style={styles.dropdownArrow}>{showRoleDropdown ? '▲' : '▼'}</Text>
+              </TouchableOpacity>
+
+              {showRoleDropdown && (
+                <View style={styles.dropdownMenu}>
+                  {ROLES.map((r) => (
+                    <TouchableOpacity
+                      key={r.value}
+                      style={[
+                        styles.dropdownItem,
+                        role === r.value && styles.dropdownItemActive,
+                      ]}
+                      onPress={() => {
+                        setRole(r.value);
+                        setShowRoleDropdown(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          role === r.value && styles.dropdownItemTextActive,
+                        ]}
+                      >
+                        {r.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
           )}
-        </TouchableOpacity>
+        </Animated.View>
+
+        {/* Submit Button with Animated Spring Tap Feedback */}
+        <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleSubmit}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            disabled={loading}
+            activeOpacity={0.9}
+          >
+            {loading ? (
+              <ActivityIndicator color="#141414" />
+            ) : (
+              <Text style={styles.buttonText}>{isLogin ? 'Sign In' : 'Create Account'}</Text>
+            )}
+          </TouchableOpacity>
+        </Animated.View>
 
         {/* Toggle Login/Register */}
         <TouchableOpacity
           style={styles.toggleButton}
-          onPress={() => {
-            setIsLogin(!isLogin);
-            setMessage(null);
-            setError(null);
-          }}
+          onPress={handleToggleMode}
+          activeOpacity={0.7}
         >
           <Text style={styles.toggleButtonText}>
-            {isLogin
-              ? 'Need an account? Register instead'
-              : 'Already registered? Log in instead'}
+            {isLogin ? (
+              <>
+                {"Don't have an account? "}
+                <Text style={styles.toggleLinkText}>Sign up</Text>
+              </>
+            ) : (
+              <>
+                {"Already have an account? "}
+                <Text style={styles.toggleLinkText}>Sign in</Text>
+              </>
+            )}
           </Text>
         </TouchableOpacity>
 
@@ -215,159 +270,177 @@ const AuthScreen = ({ apiClient, onLoginSuccess }) => {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#141414',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1F1F1F',
     width: '100%',
     maxWidth: 400,
-    borderRadius: 12,
-    padding: 24,
+    borderRadius: 16,
+    padding: 28,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: '#2D2D2D',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   icon: {
     fontSize: 28,
-    marginRight: 8,
+    marginRight: 10,
+    color: '#D4AF37',
   },
   title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#000000',
-  },
-  subtitle: {
-    color: '#666666',
-    fontSize: 12,
+    fontFamily: 'Poppins-Black',
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#D4AF37',
+    letterSpacing: 2,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 28,
   },
   successBox: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#1E2C1E',
     borderWidth: 1,
-    borderColor: '#4CAF50',
-    borderRadius: 6,
-    padding: 10,
-    marginBottom: 16,
+    borderColor: '#2E7D32',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
   },
   successText: {
-    color: '#2E7D32',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  errorBox: {
-    backgroundColor: '#FFEBEE',
-    borderWidth: 1,
-    borderColor: '#EF5350',
-    borderRadius: 6,
-    padding: 10,
-    marginBottom: 16,
-  },
-  errorText: {
-    color: '#C62828',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  inputLabel: {
-    color: '#1A1A1A',
-    fontSize: 14,
-    marginBottom: 6,
+    fontFamily: 'Poppins-Regular',
+    color: '#81C784',
+    fontSize: 13,
     fontWeight: '600',
   },
-  input: {
-    backgroundColor: '#FFFFFF',
-    color: '#000000',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+  errorBox: {
+    backgroundColor: '#3C1F1F',
     borderWidth: 1,
-    borderColor: '#CCCCCC',
+    borderColor: '#C62828',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+  },
+  errorText: {
+    fontFamily: 'Poppins-Regular',
+    color: '#E57373',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontFamily: 'Poppins-Bold',
+    color: '#888888',
+    fontSize: 12,
+    marginBottom: 8,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  input: {
+    fontFamily: 'Poppins-Regular',
+    backgroundColor: '#2A2A2A',
+    color: '#F5F5F5',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
   },
   dropdownButton: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#CCCCCC',
+    borderColor: '#3D3D3D',
   },
   dropdownButtonText: {
-    color: '#000000',
-    fontSize: 14,
+    fontFamily: 'Poppins-Regular',
+    color: '#F5F5F5',
+    fontSize: 15,
   },
   dropdownArrow: {
-    color: '#000000',
+    color: '#D4AF37',
     fontSize: 12,
   },
   dropdownMenu: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#2A2A2A',
     borderWidth: 1,
-    borderColor: '#CCCCCC',
-    borderRadius: 6,
-    marginTop: 4,
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
+    marginTop: 6,
     overflow: 'hidden',
   },
   dropdownItem: {
-    padding: 12,
+    padding: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
+    borderBottomColor: '#333333',
   },
   dropdownItemActive: {
-    backgroundColor: '#EEEEEE',
+    backgroundColor: '#333333',
   },
   dropdownItemText: {
-    color: '#333333',
+    fontFamily: 'Poppins-Regular',
+    color: '#888888',
     fontSize: 14,
   },
   dropdownItemTextActive: {
-    color: '#000000',
+    fontFamily: 'Poppins-Bold',
+    color: '#D4AF37',
     fontWeight: 'bold',
   },
   button: {
-    backgroundColor: '#000000',
-    borderRadius: 6,
-    paddingVertical: 12,
+    backgroundColor: '#D4AF37',
+    borderRadius: 8,
+    paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 10,
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
   },
   buttonDisabled: {
     opacity: 0.5,
   },
   buttonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontFamily: 'Poppins-Bold',
+    color: '#141414',
+    fontWeight: '900',
     fontSize: 15,
+    letterSpacing: 1,
   },
   toggleButton: {
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 20,
   },
   toggleButtonText: {
-    color: '#000000',
+    fontFamily: 'Poppins-Regular',
+    color: '#888888',
     fontSize: 13,
-    textDecorationLine: 'underline',
+    fontWeight: '600',
   },
-
+  toggleLinkText: {
+    fontFamily: 'Poppins-Bold',
+    color: '#D4AF37',
+    fontWeight: 'bold',
+  },
 });
 
 export default AuthScreen;

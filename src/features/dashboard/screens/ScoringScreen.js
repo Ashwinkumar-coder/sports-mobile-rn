@@ -371,8 +371,8 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
   if (setupStep === 'players') {
     return (
       <ScrollView style={styles.container}>
-        <Text style={styles.wizardTitle}>MATCH SETUP WIZARD (1/3)</Text>
-        <Text style={styles.sectionTitle}>APPLY SQUAD PLAYERS</Text>
+        <Text style={styles.wizardTitle}>Match Setup Wizard (1/3)</Text>
+        <Text style={styles.sectionTitle}>Apply Squad Players</Text>
 
         <View style={styles.formCard}>
           <Text style={styles.label}>Select Target Team to Add Player</Text>
@@ -394,12 +394,12 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
           <TextInput
             style={styles.input}
             placeholder="Type player name"
-            placeholderTextColor="#888"
+            placeholderTextColor="#666"
             value={newPlayerName}
             onChangeText={setNewPlayerName}
           />
           <TouchableOpacity style={styles.primaryActionBtn} onPress={handleAddPlayer}>
-            <Text style={styles.primaryActionBtnText}>ADD TO ROSTER</Text>
+            <Text style={styles.primaryActionBtnText}>Add to Roster</Text>
           </TouchableOpacity>
         </View>
 
@@ -414,7 +414,7 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
         </View>
 
         <TouchableOpacity style={styles.nextBtn} onPress={() => setSetupStep('toss')}>
-          <Text style={styles.nextBtnText}>NEXT: TOSS DECISION →</Text>
+          <Text style={styles.nextBtnText}>Next: Toss Decision →</Text>
         </TouchableOpacity>
       </ScrollView>
     );
@@ -424,8 +424,8 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
   if (setupStep === 'toss') {
     return (
       <ScrollView style={styles.container}>
-        <Text style={styles.wizardTitle}>MATCH SETUP WIZARD (2/3)</Text>
-        <Text style={styles.sectionTitle}>TOSS TIME OPTIONS</Text>
+        <Text style={styles.wizardTitle}>Match Setup Wizard (2/3)</Text>
+        <Text style={styles.sectionTitle}>Toss Time Options</Text>
 
         <View style={styles.formCard}>
           <Text style={styles.label}>Who won the Toss?</Text>
@@ -477,8 +477,8 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
 
     return (
       <ScrollView style={styles.container}>
-        <Text style={styles.wizardTitle}>MATCH SETUP WIZARD (3/3)</Text>
-        <Text style={styles.sectionTitle}>SELECT OPENING SQUAD MATCHUPS</Text>
+        <Text style={styles.wizardTitle}>Match Setup Wizard (3/3)</Text>
+        <Text style={styles.sectionTitle}>Select Opening Squad Matchups</Text>
 
         <View style={styles.formCard}>
           <Text style={styles.label}>Opening Batsman (Striker)</Text>
@@ -563,10 +563,12 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
           <Text style={styles.backButtonText}>← LEAVE</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>LIVE SCORING SCREEN</Text>
-        {historyStack.length > 0 && (
+        {historyStack.length > 0 ? (
           <TouchableOpacity style={styles.undoBtn} onPress={handleUndo}>
             <Text style={styles.undoText}>↩ UNDO</Text>
           </TouchableOpacity>
+        ) : (
+          <View style={{ width: 60 }} />
         )}
       </View>
 
@@ -590,7 +592,7 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
           <View style={styles.partnerMainRow}>
             <Text style={styles.partnerRole}>🏏 Striker:</Text>
             <TouchableOpacity onPress={() => setBatsmanModalVisible(true)}>
-              <Text style={[styles.partnerName, { textDecorationLine: 'underline' }]}>{striker} *</Text>
+              <Text style={[styles.partnerName, { textDecorationLine: 'underline', color: '#D4AF37' }]}>{striker} *</Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.playerStatsSub}>{getBatsmanStats(striker)}</Text>
@@ -608,7 +610,7 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
           <View style={styles.partnerMainRow}>
             <Text style={styles.partnerRole}>🥎 Bowler:</Text>
             <TouchableOpacity onPress={() => setBowlerModalVisible(true)}>
-              <Text style={[styles.partnerName, { textDecorationLine: 'underline' }]}>{bowler}</Text>
+              <Text style={[styles.partnerName, { textDecorationLine: 'underline', color: '#D4AF37' }]}>{bowler}</Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.playerStatsSub}>{getBowlerStats(bowler)}</Text>
@@ -649,7 +651,7 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
           <TouchableOpacity style={styles.scoringBtn} onPress={() => handleScore(6)}>
             <Text style={styles.scoringBtnText}>6 (Six)</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.scoringBtn, { backgroundColor: '#000000' }]} onPress={() => handleScore(0, 'wicket')}>
+          <TouchableOpacity style={[styles.scoringBtn, { backgroundColor: '#C62828' }]} onPress={() => handleScore(0, 'wicket')}>
             <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>OUT WICKET</Text>
           </TouchableOpacity>
         </View>
@@ -779,7 +781,7 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
             <TextInput
               style={styles.input}
               placeholder="Fielder Name"
-              placeholderTextColor="#888"
+              placeholderTextColor="#666"
               value={selectedFielder}
               onChangeText={setSelectedFielder}
             />
@@ -842,126 +844,137 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#141414',
     padding: 16,
   },
   wizardTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '900',
-    color: '#666666',
-    marginBottom: 4,
+    color: '#888888',
+    marginBottom: 6,
     letterSpacing: 1,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#000000',
+    color: '#D4AF37',
     marginBottom: 16,
+    letterSpacing: 0.5,
   },
   formCard: {
+    backgroundColor: '#1F1F1F',
     borderWidth: 1,
-    borderColor: '#000000',
-    padding: 16,
-    backgroundColor: '#FFFFFF',
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 20,
     marginBottom: 16,
   },
   label: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#000000',
-    textTransform: 'uppercase',
-    marginTop: 8,
-    marginBottom: 6,
-  },
-  subLabel: {
     fontSize: 11,
     fontWeight: 'bold',
-    color: '#000000',
-    marginBottom: 4,
+    color: '#888888',
+    marginTop: 8,
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  subLabel: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#D4AF37',
+    marginBottom: 6,
   },
   toggleRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   toggleBtn: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#CCCCCC',
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
+    backgroundColor: '#2A2A2A',
   },
   toggleBtnActive: {
-    borderColor: '#000000',
-    backgroundColor: '#000000',
+    borderColor: '#D4AF37',
+    backgroundColor: '#D4AF37',
   },
   toggleText: {
-    color: '#000000',
+    color: '#888888',
     fontSize: 12,
     fontWeight: 'bold',
   },
   toggleTextActive: {
-    color: '#FFFFFF',
+    color: '#141414',
   },
   input: {
+    backgroundColor: '#2A2A2A',
+    color: '#F5F5F5',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
     borderWidth: 1,
-    borderColor: '#000000',
-    padding: 10,
-    color: '#000000',
-    fontSize: 13,
-    marginBottom: 12,
-    backgroundColor: '#FFFFFF',
+    borderColor: '#3D3D3D',
+    marginBottom: 16,
   },
   primaryActionBtn: {
-    backgroundColor: '#000000',
+    backgroundColor: '#D4AF37',
+    borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
   },
   primaryActionBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    color: '#141414',
+    fontWeight: '900',
     fontSize: 12,
   },
   rosterCard: {
+    backgroundColor: '#1F1F1F',
     borderWidth: 1,
-    borderColor: '#EEEEEE',
-    padding: 12,
-    backgroundColor: '#FAFAFA',
-    marginBottom: 8,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
   },
   rosterText: {
-    color: '#333333',
-    fontSize: 12,
+    color: '#F5F5F5',
+    fontSize: 13,
+    lineHeight: 18,
   },
   nextBtn: {
-    backgroundColor: '#000000',
+    backgroundColor: '#D4AF37',
+    borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 16,
     marginBottom: 40,
   },
   nextBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 13,
+    color: '#141414',
+    fontWeight: '900',
+    fontSize: 14,
   },
   optionChip: {
+    backgroundColor: '#2A2A2A',
     borderWidth: 1,
-    borderColor: '#CCCCCC',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     marginRight: 8,
   },
   optionChipActive: {
-    borderColor: '#000000',
-    backgroundColor: '#000000',
+    borderColor: '#D4AF37',
+    backgroundColor: '#D4AF37',
   },
   chipText: {
-    color: '#000000',
+    color: '#888888',
     fontSize: 12,
   },
   chipTextActive: {
-    color: '#FFFFFF',
+    color: '#141414',
     fontWeight: 'bold',
   },
   header: {
@@ -970,162 +983,172 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#000000',
+    borderBottomColor: '#2D2D2D',
     marginBottom: 16,
   },
   backButton: {
-    backgroundColor: '#000000',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    backgroundColor: '#2A2A2A',
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   backButtonText: {
-    color: '#FFFFFF',
+    color: '#F5F5F5',
     fontWeight: 'bold',
     fontSize: 11,
   },
   headerTitle: {
     fontWeight: '900',
-    fontSize: 13,
-    color: '#000000',
+    fontSize: 14,
+    color: '#D4AF37',
+    letterSpacing: 0.5,
   },
   undoBtn: {
+    backgroundColor: '#2A2A2A',
     borderWidth: 1,
-    borderColor: '#000000',
-    paddingVertical: 5,
-    paddingHorizontal: 8,
+    borderColor: '#C62828',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   undoText: {
-    color: '#000000',
+    color: '#E57373',
     fontWeight: 'bold',
     fontSize: 11,
   },
   scoreboard: {
+    backgroundColor: '#1F1F1F',
     borderWidth: 1,
-    borderColor: '#000000',
-    padding: 20,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 24,
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   bigScore: {
-    fontSize: 48,
+    fontSize: 52,
     fontWeight: '900',
-    color: '#000000',
+    color: '#D4AF37',
   },
   oversText: {
-    fontSize: 14,
-    color: '#000000',
+    fontSize: 15,
+    color: '#F5F5F5',
     fontWeight: 'bold',
-    marginTop: 4,
+    marginTop: 6,
   },
   oversLimit: {
     color: '#888888',
     fontWeight: 'normal',
   },
   partnershipsCard: {
+    backgroundColor: '#1F1F1F',
     borderWidth: 1,
-    borderColor: '#000000',
-    padding: 12,
-    marginBottom: 12,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
   },
   partnerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
+    borderBottomColor: '#2D2D2D',
   },
   partnerRole: {
-    fontSize: 12,
-    color: '#666666',
+    fontSize: 13,
+    color: '#888888',
     fontWeight: 'bold',
   },
   partnerName: {
-    fontSize: 12,
-    color: '#000000',
+    fontSize: 13,
+    color: '#F5F5F5',
     fontWeight: 'bold',
   },
   thisOverCard: {
+    backgroundColor: '#1F1F1F',
     borderWidth: 1,
-    borderColor: '#000000',
-    padding: 12,
-    marginBottom: 16,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
   },
   thisOverTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 'bold',
-    color: '#666666',
-    marginBottom: 6,
+    color: '#888888',
+    marginBottom: 10,
   },
   ballsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
   },
   ballCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: '#000000',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000000',
+    backgroundColor: '#D4AF37',
   },
   ballLabel: {
-    color: '#FFFFFF',
-    fontSize: 10,
+    color: '#141414',
+    fontSize: 11,
     fontWeight: 'bold',
   },
   scoringControls: {
     marginBottom: 40,
-    gap: 8,
+    gap: 10,
   },
   gridRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
   scoringBtn: {
     flex: 1,
+    backgroundColor: '#1F1F1F',
     borderWidth: 1,
-    borderColor: '#000000',
+    borderColor: '#2D2D2D',
+    borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
   },
   scoringBtnText: {
-    color: '#000000',
+    color: '#F5F5F5',
     fontWeight: 'bold',
-    fontSize: 13,
+    fontSize: 14,
   },
   modalBg: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   wagonWheelCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#000000',
-    padding: 20,
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 20,
+    padding: 24,
     width: '100%',
     maxWidth: 320,
     alignItems: 'center',
   },
   modalHeading: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '900',
-    color: '#000000',
-    marginBottom: 6,
+    color: '#D4AF37',
+    marginBottom: 8,
     textAlign: 'center',
-    textTransform: 'uppercase',
   },
   modalSubheading: {
-    fontSize: 11,
-    color: '#666666',
-    marginBottom: 16,
+    fontSize: 12,
+    color: '#888888',
+    marginBottom: 20,
     textAlign: 'center',
   },
   wagonField: {
@@ -1133,12 +1156,12 @@ const styles = StyleSheet.create({
     height: 180,
     borderRadius: 90,
     borderWidth: 2,
-    borderColor: '#000000',
+    borderColor: '#3D3D3D',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#2A2A2A',
     position: 'relative',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   fieldCircle: {
     position: 'relative',
@@ -1149,8 +1172,8 @@ const styles = StyleSheet.create({
     width: 30,
     height: 10,
     borderWidth: 1,
-    borderColor: '#000000',
-    backgroundColor: '#E0E0E0',
+    borderColor: '#3D3D3D',
+    backgroundColor: '#1F1F1F',
     position: 'absolute',
     left: 73,
     top: 83,
@@ -1159,41 +1182,45 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#000000',
+    backgroundColor: '#D4AF37',
     position: 'absolute',
   },
   modalBtnRow: {
     width: '100%',
-    gap: 8,
+    gap: 10,
   },
   confirmBtn: {
-    backgroundColor: '#000000',
+    backgroundColor: '#D4AF37',
+    borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
     width: '100%',
   },
   confirmBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 12,
+    color: '#141414',
+    fontWeight: '900',
+    fontSize: 13,
   },
   cancelBtn: {
+    backgroundColor: '#2A2A2A',
     borderWidth: 1,
-    borderColor: '#000000',
-    paddingVertical: 10,
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
+    paddingVertical: 12,
     alignItems: 'center',
     width: '100%',
   },
   cancelBtnText: {
-    color: '#000000',
+    color: '#F5F5F5',
     fontWeight: 'bold',
-    fontSize: 12,
+    fontSize: 13,
   },
   extraSelectCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#000000',
-    padding: 20,
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 20,
+    padding: 24,
     width: '100%',
     maxWidth: 320,
   },
@@ -1207,79 +1234,76 @@ const styles = StyleSheet.create({
   runsOptionBtn: {
     width: 45,
     height: 45,
+    backgroundColor: '#2A2A2A',
     borderWidth: 1,
-    borderColor: '#000000',
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
   runsOptionText: {
-    color: '#000000',
+    color: '#D4AF37',
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 15,
   },
   dismissalCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#000000',
-    padding: 20,
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 20,
+    padding: 24,
     width: '100%',
     maxWidth: 320,
   },
   dismissalSelectorRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 12,
+    gap: 8,
+    marginBottom: 16,
   },
   dismissalTypeBtn: {
+    backgroundColor: '#2A2A2A',
     borderWidth: 1,
-    borderColor: '#CCCCCC',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   dismissalTypeBtnActive: {
-    borderColor: '#000000',
-    backgroundColor: '#000000',
+    borderColor: '#D4AF37',
+    backgroundColor: '#D4AF37',
   },
   dismissalTypeText: {
-    color: '#666666',
+    color: '#888888',
     fontSize: 12,
   },
   dismissalTypeTextActive: {
-    color: '#FFFFFF',
+    color: '#141414',
     fontWeight: 'bold',
   },
   playerPickCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#000000',
-    padding: 20,
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 20,
+    padding: 24,
     width: '100%',
     maxWidth: 320,
   },
   playerSelectRow: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
+    borderBottomColor: '#2D2D2D',
   },
   playerSelectRowText: {
-    color: '#000000',
-    fontSize: 13,
+    color: '#F5F5F5',
+    fontSize: 14,
     fontWeight: '500',
-  },
-  inningsTransitionCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#000000',
-    padding: 20,
-    width: '100%',
-    maxWidth: 320,
-    alignItems: 'center',
   },
   partnerRowContainer: {
     borderBottomWidth: 1,
-    borderColor: '#EEEEEE',
-    paddingVertical: 8,
+    borderColor: '#2D2D2D',
+    paddingVertical: 10,
   },
   partnerMainRow: {
     flexDirection: 'row',
@@ -1288,8 +1312,7 @@ const styles = StyleSheet.create({
   },
   playerStatsSub: {
     fontSize: 12,
-    color: '#555555',
-    fontFamily: 'Courier',
+    color: '#888888',
     marginTop: 4,
   },
 });

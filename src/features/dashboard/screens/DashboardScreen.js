@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Modal, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Modal, ScrollView, RefreshControl } from 'react-native';
 import PlayerDashboard from './PlayerDashboard';
 import CoachDashboard from './CoachDashboard';
 import SponsorDashboard from './SponsorDashboard';
@@ -14,8 +14,51 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
   const [players, setPlayers] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  const fetchDashboard = async () => {
-    setLoading(true);
+  const [activeTab, setActiveTab] = useState('');
+
+  useEffect(() => {
+    if (user.role === 'player') {
+      setActiveTab('Overview');
+    } else if (user.role === 'coach') {
+      setActiveTab('Trainees');
+    } else if (user.role === 'sponsor') {
+      setActiveTab('Sponsorships');
+    }
+  }, [user.role]);
+
+  // Pulse animation for Skeleton loaders
+  const pulseAnim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    let pulse;
+    if (loading) {
+      pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 0.8,
+            duration: 800,
+            easing: Easing.ease,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0.3,
+            duration: 800,
+            easing: Easing.ease,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulse.start();
+    }
+    return () => {
+      if (pulse) pulse.stop();
+    };
+  }, [loading]);
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchDashboard = async (showSkeleton = true) => {
+    if (showSkeleton) setLoading(true);
     try {
       const role = user.role;
       let dashData = null;
@@ -63,38 +106,200 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
     return 0;
   };
 
+  // Modern Skeleton Loader components matching the layout of each specific dashboard role
+  const renderSkeleton = () => {
+    const role = user.role;
+    if (role === 'player') {
+      return (
+        <View style={styles.skeletonContainer}>
+          {/* Stats row: 3 columns */}
+          <View style={styles.skeletonStatsRow}>
+            <Animated.View style={[styles.skeletonStat, { opacity: pulseAnim }]} />
+            <Animated.View style={[styles.skeletonStat, { opacity: pulseAnim }]} />
+            <Animated.View style={[styles.skeletonStat, { opacity: pulseAnim }]} />
+          </View>
+          {/* Register Team Form skeleton */}
+          <Animated.View style={[styles.skeletonTitleLine, { opacity: pulseAnim }]} />
+          <Animated.View style={[styles.skeletonFormBlock, { opacity: pulseAnim }]} />
+          {/* My Squads list skeleton */}
+          <Animated.View style={[styles.skeletonTitleLine, { opacity: pulseAnim, marginTop: 24 }]} />
+          <Animated.View style={[styles.skeletonListCard, { opacity: pulseAnim }]} />
+          <Animated.View style={[styles.skeletonListCard, { opacity: pulseAnim }]} />
+        </View>
+      );
+    } else if (role === 'coach') {
+      return (
+        <View style={styles.skeletonContainer}>
+          {/* 1 full-width stat card */}
+          <Animated.View style={[styles.skeletonStatFull, { opacity: pulseAnim }]} />
+          {/* Trainee Leaderboard title */}
+          <Animated.View style={[styles.skeletonTitleLine, { opacity: pulseAnim }]} />
+          {/* List items */}
+          <Animated.View style={[styles.skeletonLeaderboardCard, { opacity: pulseAnim }]} />
+          <Animated.View style={[styles.skeletonLeaderboardCard, { opacity: pulseAnim }]} />
+          <Animated.View style={[styles.skeletonLeaderboardCard, { opacity: pulseAnim }]} />
+        </View>
+      );
+    } else if (role === 'sponsor') {
+      return (
+        <View style={styles.skeletonContainer}>
+          {/* 1 full-width stat card */}
+          <Animated.View style={[styles.skeletonStatFull, { opacity: pulseAnim }]} />
+          {/* Sponsor a tournament form skeleton */}
+          <Animated.View style={[styles.skeletonTitleLine, { opacity: pulseAnim }]} />
+          <Animated.View style={[styles.skeletonFormBlockShort, { opacity: pulseAnim }]} />
+          {/* History title and cards */}
+          <Animated.View style={[styles.skeletonTitleLine, { opacity: pulseAnim, marginTop: 24 }]} />
+          <Animated.View style={[styles.skeletonListCard, { opacity: pulseAnim }]} />
+        </View>
+      );
+    } else if (role === 'scorer') {
+      return (
+        <View style={styles.skeletonContainer}>
+          {/* 1 center-aligned stat card */}
+          <Animated.View style={[styles.skeletonStatFull, { opacity: pulseAnim }]} />
+          {/* Apply form */}
+          <Animated.View style={[styles.skeletonTitleLine, { opacity: pulseAnim }]} />
+          <Animated.View style={[styles.skeletonFormBlock, { opacity: pulseAnim }]} />
+          {/* Assigned matches list */}
+          <Animated.View style={[styles.skeletonTitleLine, { opacity: pulseAnim, marginTop: 24 }]} />
+          <Animated.View style={[styles.skeletonListCard, { opacity: pulseAnim }]} />
+        </View>
+      );
+    }
+
+    // Default fallback skeleton
+    return (
+      <View style={styles.skeletonContainer}>
+        <Animated.View style={[styles.skeletonCard, { opacity: pulseAnim }]} />
+      </View>
+    );
+  };
+
+
+  // Custom Logout Icon Component
+  const LogoutIcon = ({ color }) => (
+    <View style={styles.logoutIconContainer}>
+      <View style={[styles.logoutDoor, { borderColor: color }]} />
+      <View style={[styles.logoutArrowLine, { backgroundColor: color }]} />
+      <View style={[styles.logoutArrowHead, { borderTopColor: color, borderRightColor: color }]} />
+    </View>
+  );
+
+  // Custom Bell Icon Component
+  const BellIcon = ({ color, count }) => (
+    <View style={styles.bellIconContainer}>
+      <View style={[styles.bellLoop, { borderColor: color }]} />
+      <View style={[styles.bellBody, { backgroundColor: color }]} />
+      <View style={[styles.bellLip, { backgroundColor: color }]} />
+      <View style={[styles.bellClapper, { backgroundColor: color }]} />
+      {count > 0 && (
+        <View style={styles.bellBadge}>
+          <Text style={styles.bellBadgeText}>{count}</Text>
+        </View>
+      )}
+    </View>
+  );
+
+  // Custom Tab Icon Components
+  const HomeIcon = ({ color }) => (
+    <View style={styles.tabIconHomeContainer}>
+      <View style={[styles.tabIconHomeRoof, { borderBottomColor: color }]} />
+      <View style={[styles.tabIconHomeBody, { borderColor: color }]} />
+    </View>
+  );
+
+  const ChartIcon = ({ color }) => (
+    <View style={styles.tabIconChartContainer}>
+      <View style={[styles.tabIconChartBar, { height: 8, backgroundColor: color }]} />
+      <View style={[styles.tabIconChartBar, { height: 15, backgroundColor: color }]} />
+      <View style={[styles.tabIconChartBar, { height: 11, backgroundColor: color }]} />
+    </View>
+  );
+
+  const CalendarIcon = ({ color }) => (
+    <View style={[styles.tabIconCalendarContainer, { borderColor: color }]}>
+      <View style={[styles.tabIconCalendarHeader, { backgroundColor: color }]} />
+      <View style={styles.tabIconCalendarGrid}>
+        <View style={[styles.tabIconCalendarDot, { backgroundColor: color }]} />
+        <View style={[styles.tabIconCalendarDot, { backgroundColor: color }]} />
+      </View>
+    </View>
+  );
+
+  const UsersIcon = ({ color }) => (
+    <View style={styles.tabIconUsersContainer}>
+      <View style={[styles.tabIconUsersHead, { borderColor: color }]} />
+      <View style={[styles.tabIconUsersBody, { borderColor: color }]} />
+    </View>
+  );
+
+  const MoneyIcon = ({ color }) => (
+    <View style={[styles.tabIconMoneyContainer, { borderColor: color }]}>
+      <Text style={[styles.tabIconMoneyText, { color }]}>$</Text>
+    </View>
+  );
+
+  const renderTabIcon = (tab, isActive) => {
+    const color = isActive ? '#D4AF37' : '#888888';
+    switch (tab) {
+      case 'Overview':
+        return <HomeIcon color={color} />;
+      case 'Statistics':
+        return <ChartIcon color={color} />;
+      case 'Matches':
+        return <CalendarIcon color={color} />;
+      case 'Trainees':
+        return <UsersIcon color={color} />;
+      case 'Sponsorships':
+        return <MoneyIcon color={color} />;
+      default:
+        return null;
+    }
+  };
+
+  const getTabsForRole = (role) => {
+    if (role === 'player') return ['Overview', 'Statistics', 'Matches'];
+    if (role === 'coach') return ['Trainees', 'Matches'];
+    if (role === 'sponsor') return ['Sponsorships', 'Matches'];
+    return [];
+  };
+
   return (
     <View style={styles.container}>
       {/* Custom Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{roleLabel} PORTAL</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.notifyButton} onPress={() => setShowNotifications(true)}>
-            <Text style={styles.notifyButtonText}>🔔 {notifications.length > 0 ? `(${notifications.length})` : ''}</Text>
+            <BellIcon color="#F5F5F5" count={notifications.length} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerButton} onPress={fetchDashboard}>
-            <Text style={styles.headerButtonText}>↻</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerButton} onPress={onLogout}>
-            <Text style={styles.headerButtonText}>Logout</Text>
+          <TouchableOpacity style={styles.logoutButton} onPress={onLogout} activeOpacity={0.7}>
+            <LogoutIcon color="#F5F5F5" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Main Content */}
-      <ScrollView style={styles.contentScroll} contentContainerStyle={styles.contentContainer}>
-        {/* Welcome Card */}
-        <View style={styles.welcomeCard}>
-          <Text style={styles.welcomeTitle}>Welcome back, {user.full_name}!</Text>
-          <Text style={styles.welcomeRole}>Role: {readableRole}</Text>
-          <Text style={styles.welcomeMatches}>Matches / Tourneys: <Text style={{fontWeight: 'bold'}}>{getMatchesCount()}</Text></Text>
-        </View>
 
+      {/* Main Content */}
+      <ScrollView 
+        style={styles.contentScroll} 
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await fetchDashboard(false);
+              setRefreshing(false);
+            }}
+            tintColor="#D4AF37"
+            colors={["#D4AF37"]}
+          />
+        }
+      >
         {/* Dynamic Dashboard Content */}
         {loading ? (
-          <View style={styles.loaderContainer}>
-            <ActivityIndicator size="large" color="#000000" />
-          </View>
+          renderSkeleton()
         ) : data && !data.detail ? (
           <View style={styles.dashboardContainer}>
             {user.role === 'player' && (
@@ -106,6 +311,7 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
                 players={players}
                 apiClient={apiClient}
                 onRefresh={fetchDashboard}
+                activeTab={activeTab}
               />
             )}
             {user.role === 'coach' && (
@@ -114,6 +320,7 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
                 notifications={notifications}
                 tournaments={tournaments}
                 apiClient={apiClient}
+                activeTab={activeTab}
               />
             )}
             {user.role === 'sponsor' && (
@@ -123,6 +330,7 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
                 tournaments={tournaments}
                 apiClient={apiClient}
                 onRefresh={fetchDashboard}
+                activeTab={activeTab}
               />
             )}
             {user.role === 'scorer' && (
@@ -135,14 +343,30 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
               />
             )}
           </View>
-        ) : (
-          <View style={styles.fallbackContainer}>
-            <Text style={styles.fallbackText}>
-              Admin Dashboards manage approvals via Web Portal in the POC.
-            </Text>
-          </View>
-        )}
+        ) : null}
       </ScrollView>
+
+      {/* Fixed Bottom Navigation Bar */}
+      {!loading && ['player', 'coach', 'sponsor'].includes(user.role) && (
+        <View style={styles.bottomTabBar}>
+          {getTabsForRole(user.role).map((tab) => {
+            const isActive = activeTab === tab;
+            return (
+              <TouchableOpacity
+                key={tab}
+                activeOpacity={0.85}
+                style={styles.bottomTabButton}
+                onPress={() => setActiveTab(tab)}
+              >
+                {renderTabIcon(tab, isActive)}
+                <Text style={[styles.bottomTabLabel, isActive && styles.bottomTabLabelActive]}>
+                  {tab}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
 
       {/* Notifications Modal Overlay */}
       <Modal
@@ -154,7 +378,7 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Simulated Mailbox 📬</Text>
+              <Text style={styles.modalTitle}>Notifications 📬</Text>
               <TouchableOpacity style={styles.closeButton} onPress={() => setShowNotifications(false)}>
                 <Text style={styles.closeButtonText}>✕</Text>
               </TouchableOpacity>
@@ -182,24 +406,29 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#141414',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 50,
-    paddingBottom: 16,
+    justifyContent: 'flex-end',
+    paddingTop: 42,
+    paddingBottom: 10,
     paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1F1F1F',
     borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
+    borderBottomColor: '#2D2D2D',
   },
-  headerTitle: {
-    color: '#000000',
-    fontSize: 15,
-    fontWeight: 'bold',
-    letterSpacing: 1,
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoText: {
+    fontFamily: 'Poppins-Black',
+    color: '#D4AF37',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 2,
   },
   headerActions: {
     flexDirection: 'row',
@@ -208,57 +437,94 @@ const styles = StyleSheet.create({
   notifyButton: {
     paddingVertical: 6,
     paddingHorizontal: 8,
-    marginRight: 8,
+    marginRight: 16,
   },
-  notifyButtonText: {
-    fontSize: 16,
-    color: '#000000',
-    fontWeight: 'bold',
+  logoutButton: {
+    padding: 6,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerButton: {
-    marginLeft: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#CCCCCC',
-    backgroundColor: '#FFFFFF',
+  logoutIconContainer: {
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
-  headerButtonText: {
-    color: '#000000',
-    fontWeight: '600',
-    fontSize: 12,
+  logoutDoor: {
+    width: 12,
+    height: 16,
+    borderWidth: 1.5,
+    borderRightWidth: 0,
+    borderTopLeftRadius: 2,
+    borderBottomLeftRadius: 2,
+    position: 'absolute',
+    left: 2,
+  },
+  logoutArrowLine: {
+    width: 10,
+    height: 1.5,
+    position: 'absolute',
+    right: 3,
+  },
+  logoutArrowHead: {
+    width: 5,
+    height: 5,
+    borderTopWidth: 1.5,
+    borderRightWidth: 1.5,
+    transform: [{ rotate: '45deg' }],
+    position: 'absolute',
+    right: 3,
   },
   contentScroll: {
     flex: 1,
   },
   contentContainer: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 80, // Add bottom padding to prevent bottom tab overlap
   },
   welcomeCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: 16,
-    marginBottom: 20,
+    backgroundColor: '#1F1F1F',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#EEEEEE',
+    borderColor: '#2D2D2D',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  welcomeMain: {
+    flex: 1,
+    marginRight: 12,
   },
   welcomeTitle: {
-    fontWeight: 'black',
+    fontFamily: 'Poppins-Bold',
+    fontWeight: '900',
     fontSize: 20,
-    color: '#000000',
+    color: '#F5F5F5',
     marginBottom: 4,
   },
   welcomeRole: {
-    color: '#555555',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontFamily: 'Poppins-Medium',
+    color: '#888888',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
-  welcomeMatches: {
-    color: '#555555',
-    fontSize: 13,
+  welcomeBadge: {
+    backgroundColor: '#D4AF37',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  welcomeBadgeText: {
+    fontFamily: 'Poppins-Bold',
+    color: '#141414',
+    fontSize: 11,
+    fontWeight: '900',
   },
   loaderContainer: {
     paddingVertical: 40,
@@ -275,78 +541,335 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   fallbackText: {
-    color: '#666666',
+    fontFamily: 'Poppins-Regular',
+    color: '#888888',
     textAlign: 'center',
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: '#1F1F1F',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     maxHeight: '80%',
-    padding: 20,
+    padding: 24,
     borderTopWidth: 1,
-    borderTopColor: '#DDDDDD',
+    borderTopColor: '#2D2D2D',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 12,
+    paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
-    marginBottom: 16,
+    borderBottomColor: '#2D2D2D',
+    marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000000',
+    fontFamily: 'Poppins-Bold',
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#F5F5F5',
+    letterSpacing: 1,
   },
   closeButton: {
     padding: 4,
   },
   closeButtonText: {
+    fontFamily: 'Poppins-Bold',
     fontSize: 18,
-    color: '#000000',
+    color: '#F5F5F5',
     fontWeight: 'bold',
   },
   modalScroll: {
     marginBottom: 20,
   },
   emptyNotifications: {
+    fontFamily: 'Poppins-Regular',
     color: '#888888',
     textAlign: 'center',
-    fontSize: 13,
-    paddingVertical: 30,
-    italic: true,
+    fontSize: 14,
+    paddingVertical: 40,
   },
   notificationCard: {
     borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5',
-    paddingVertical: 12,
+    borderBottomColor: '#2D2D2D',
+    paddingVertical: 16,
   },
   noteSubject: {
+    fontFamily: 'Poppins-Bold',
     fontWeight: 'bold',
-    fontSize: 14,
-    color: '#000000',
-    marginBottom: 4,
+    fontSize: 15,
+    color: '#D4AF37',
+    marginBottom: 6,
   },
   noteBody: {
-    fontSize: 13,
-    color: '#333333',
-    lineHeight: 18,
+    fontFamily: 'Poppins-Regular',
+    fontSize: 14,
+    color: '#F5F5F5',
+    lineHeight: 20,
   },
   noteTime: {
+    fontFamily: 'Poppins-Regular',
+    fontSize: 11,
+    color: '#888888',
+    marginTop: 8,
+  },
+  // Skeleton Loading styles
+  skeletonContainer: {
+    flex: 1,
+  },
+  skeletonCard: {
+    height: 100,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 16,
+    marginBottom: 24,
+  },
+  skeletonStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 24,
+  },
+  skeletonStat: {
+    flex: 1,
+    height: 80,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 12,
+  },
+  skeletonStatFull: {
+    height: 90,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 16,
+    marginBottom: 24,
+  },
+  skeletonTitleLine: {
+    height: 18,
+    width: '45%',
+    backgroundColor: '#2A2A2A',
+    borderRadius: 4,
+    marginBottom: 16,
+  },
+  skeletonFormBlock: {
+    height: 340,
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    marginBottom: 24,
+  },
+  skeletonFormBlockShort: {
+    height: 220,
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    marginBottom: 24,
+  },
+  skeletonListCard: {
+    height: 56,
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  skeletonLeaderboardCard: {
+    height: 72,
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  // Custom Bell Icon Styles
+  bellIconContainer: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  bellLoop: {
+    width: 6,
+    height: 4,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+    borderWidth: 1.5,
+    marginBottom: -1,
+  },
+  bellBody: {
+    width: 14,
+    height: 10,
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 5,
+  },
+  bellLip: {
+    width: 18,
+    height: 2,
+    borderRadius: 1,
+    marginVertical: 0.5,
+  },
+  bellClapper: {
+    width: 4,
+    height: 3,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -6,
+    backgroundColor: '#FF3B30',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: '#1F1F1F',
+  },
+  bellBadgeText: {
+    fontFamily: 'Poppins-Black',
+    color: '#F5F5F5',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  // Fixed Bottom Navigation Bar Styles
+  bottomTabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#1F1F1F',
+    borderTopWidth: 1,
+    borderTopColor: '#2D2D2D',
+    paddingBottom: 25, // For safe area on iOS
+    paddingTop: 10,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  bottomTabButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  bottomTabLabel: {
+    fontFamily: 'Poppins-Medium',
     fontSize: 10,
-    color: '#999999',
-    marginTop: 6,
-    fontFamily: 'Courier',
+    color: '#888888',
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  bottomTabLabelActive: {
+    fontFamily: 'Poppins-Bold',
+    color: '#D4AF37',
+    fontWeight: '800',
+  },
+  // Custom Tab Icon Styles
+  tabIconHomeContainer: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  tabIconHomeRoof: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 10,
+    borderRightWidth: 10,
+    borderBottomWidth: 8,
+    borderStyle: 'solid',
+    backgroundColor: 'transparent',
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  tabIconHomeBody: {
+    width: 16,
+    height: 10,
+    borderWidth: 1.5,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
+  },
+  tabIconChartContainer: {
+    width: 20,
+    height: 20,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  tabIconChartBar: {
+    width: 4,
+    borderRadius: 1,
+  },
+  tabIconCalendarContainer: {
+    width: 20,
+    height: 20,
+    borderWidth: 1.5,
+    borderRadius: 3,
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  tabIconCalendarHeader: {
+    width: '100%',
+    height: 2,
+    position: 'absolute',
+    top: 2,
+  },
+  tabIconCalendarGrid: {
+    flexDirection: 'row',
+    gap: 2,
+    marginBottom: 1,
+  },
+  tabIconCalendarDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+  },
+  tabIconUsersContainer: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIconUsersHead: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    marginBottom: 1,
+  },
+  tabIconUsersBody: {
+    width: 16,
+    height: 6,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
+  },
+  tabIconMoneyContainer: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIconMoneyText: {
+    fontFamily: 'Poppins-Black',
+    fontSize: 11,
+    fontWeight: '900',
+    marginTop: -1,
   },
 });
 

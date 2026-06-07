@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Modal,
+  Animated,
+  Easing,
 } from 'react-native';
 import StatCard from '../widgets/StatCard';
 
@@ -17,12 +19,50 @@ const SponsorDashboard = ({
   tournaments = [],
   apiClient,
   onRefresh,
+  activeTab: parentActiveTab,
 }) => {
   const total = data.total_sponsored ?? 0.0;
   const history = data.sponsorships ?? [];
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState('Sponsorships'); // 'Sponsorships', 'Matches'
+  const [localTab, setLocalTab] = useState('Sponsorships'); // 'Sponsorships', 'Matches'
+  const activeTab = parentActiveTab || localTab;
+  const setActiveTab = setLocalTab;
+
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const prevTabRef = useRef(activeTab);
+
+  useEffect(() => {
+    const tabs = ['Sponsorships', 'Matches'];
+    const prevIndex = tabs.indexOf(prevTabRef.current);
+    const currIndex = tabs.indexOf(activeTab);
+    prevTabRef.current = activeTab;
+
+    if (prevIndex !== -1 && currIndex !== -1 && prevIndex !== currIndex) {
+      const slideStart = currIndex > prevIndex ? 100 : -100;
+      slideAnim.setValue(slideStart);
+      fadeAnim.setValue(0.3);
+
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 250,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 250,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      slideAnim.setValue(0);
+      fadeAnim.setValue(1);
+    }
+  }, [activeTab]);
 
   // Form States
   const [selectedTourneyId, setSelectedTourneyId] = useState('');
@@ -37,6 +77,49 @@ const SponsorDashboard = ({
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [matchDetailsTab, setMatchDetailsTab] = useState('Summary'); // 'Summary', 'Scorecard'
+
+  // Spring animations
+  const btnScale = useRef(new Animated.Value(1)).current;
+  const badgePulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(badgePulse, {
+          toValue: 1.12,
+          duration: 950,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(badgePulse, {
+          toValue: 1,
+          duration: 950,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseLoop.start();
+    return () => pulseLoop.stop();
+  }, []);
+
+  const handlePressIn = () => {
+    Animated.spring(btnScale, {
+      toValue: 0.95,
+      tension: 160,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(btnScale, {
+      toValue: 1,
+      tension: 160,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
+  };
 
   const fetchMatches = async () => {
     setLoadingMatches(true);
@@ -99,21 +182,26 @@ const SponsorDashboard = ({
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+    <View style={{ flex: 1, backgroundColor: '#141414' }}>
       {/* Dashboard Sub-Tabs */}
-      <View style={styles.tabBar}>
-        {['Sponsorships', 'Matches'].map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text style={[styles.tabButtonText, activeTab === tab && styles.tabButtonTextActive]}>
-              {tab.toUpperCase()}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {!parentActiveTab && (
+        <View style={styles.tabBar}>
+          {['Sponsorships', 'Matches'].map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              activeOpacity={0.8}
+              style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabButtonText, activeTab === tab && styles.tabButtonTextActive]}>
+                {tab.toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateX: slideAnim }] }}>
 
       <ScrollView style={styles.container} nestedScrollEnabled={true}>
         {activeTab === 'Sponsorships' && (
@@ -124,15 +212,24 @@ const SponsorDashboard = ({
 
             {/* Sponsorship Pledge Form */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>SPONSOR A TOURNAMENT</Text>
+              <Text style={styles.sectionTitle}>Sponsor a Tournament</Text>
               <View style={styles.formCard}>
-                {message ? <Text style={styles.successText}>{message}</Text> : null}
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                {message ? (
+                  <View style={styles.successBox}>
+                    <Text style={styles.successText}>✓ {message}</Text>
+                  </View>
+                ) : null}
+                {error ? (
+                  <View style={styles.errorBox}>
+                    <Text style={styles.errorText}>⚠ {error}</Text>
+                  </View>
+                ) : null}
 
                 {/* Tournament Selection */}
                 <Text style={styles.label}>Select Tournament</Text>
                 <TouchableOpacity
                   style={styles.dropdown}
+                  activeOpacity={0.8}
                   onPress={() => setShowTourneys(!showTourneys)}
                 >
                   <Text style={styles.dropdownText}>{getSelectedTourneyLabel()}</Text>
@@ -162,32 +259,40 @@ const SponsorDashboard = ({
                 <TextInput
                   style={styles.input}
                   placeholder="e.g. 1500"
-                  placeholderTextColor="#888"
+                  placeholderTextColor="#666"
                   keyboardType="numeric"
                   value={amount}
                   onChangeText={setAmount}
                 />
 
                 {/* Submit Button */}
-                <TouchableOpacity
-                  style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
-                  onPress={handlePledge}
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.submitButtonText}>SUBMIT PLEDGE</Text>
-                  )}
-                </TouchableOpacity>
+                <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+                  <TouchableOpacity
+                    style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+                    onPress={handlePledge}
+                    onPressIn={handlePressIn}
+                    onPressOut={handlePressOut}
+                    disabled={submitting}
+                    activeOpacity={0.9}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator color="#141414" />
+                    ) : (
+                      <Text style={styles.submitButtonText}>SUBMIT PLEDGE</Text>
+                    )}
+                  </TouchableOpacity>
+                </Animated.View>
               </View>
             </View>
 
             {/* Contribution History */}
             <View style={[styles.section, { marginBottom: 40 }]}>
-              <Text style={styles.sectionTitle}>PLEDGES & OUTCOMES HISTORY</Text>
+              <Text style={styles.sectionTitle}>Pledges & Outcomes History</Text>
               {history.length === 0 ? (
-                <Text style={styles.emptyText}>No sponsorship contributions registered.</Text>
+                <View style={styles.emptyStateContainer}>
+                  <Text style={styles.emptyStateEmoji}>💼</Text>
+                  <Text style={styles.emptyText}>No sponsorship contributions registered.</Text>
+                </View>
               ) : (
                 history.map((item, index) => (
                   <View key={index} style={styles.pledgeCard}>
@@ -206,16 +311,20 @@ const SponsorDashboard = ({
 
         {activeTab === 'Matches' && (
           <View style={{ marginBottom: 40 }}>
-            <Text style={styles.sectionTitle}>TOURNAMENT MATCHES</Text>
+            <Text style={styles.sectionTitle}>Tournament Matches</Text>
             {loadingMatches ? (
-              <ActivityIndicator color="#000" style={{ marginVertical: 30 }} />
+              <ActivityIndicator color="#D4AF37" style={{ marginVertical: 30 }} />
             ) : matchesList.length === 0 ? (
-              <Text style={styles.emptyText}>No tournament matches scheduled yet.</Text>
+              <View style={styles.emptyStateContainer}>
+                <Text style={styles.emptyStateEmoji}>📅</Text>
+                <Text style={styles.emptyText}>No tournament matches scheduled yet.</Text>
+              </View>
             ) : (
               matchesList.map((match) => (
                 <TouchableOpacity
                   key={match.id}
                   style={styles.matchCard}
+                  activeOpacity={0.9}
                   onPress={() => {
                     setSelectedMatch(match);
                     setMatchDetailsTab('Summary');
@@ -230,9 +339,25 @@ const SponsorDashboard = ({
                       {match.score_summary || 'Live Scoreboard Pending'}
                     </Text>
                   </View>
-                  <View style={styles.matchStatusBadge}>
-                    <Text style={styles.matchStatusText}>{match.status?.toUpperCase()}</Text>
-                  </View>
+
+                  <Animated.View
+                    style={[
+                      styles.matchStatusBadge,
+                      match.status === 'live' && {
+                        borderColor: '#FF3B30',
+                        transform: [{ scale: badgePulse }]
+                      }
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.matchStatusText,
+                        match.status === 'live' && { color: '#FF3B30', fontWeight: '900' }
+                      ]}
+                    >
+                      {match.status?.toUpperCase()}
+                    </Text>
+                  </Animated.View>
                 </TouchableOpacity>
               ))
             )}
@@ -310,7 +435,7 @@ const SponsorDashboard = ({
                       {selectedMatch.winner && (
                         <View style={styles.summaryStatItem}>
                           <Text style={styles.summaryLabel}>Winner</Text>
-                          <Text style={[styles.summaryVal, { fontWeight: 'bold', color: '#2E7D32' }]}>
+                          <Text style={[styles.summaryVal, { fontWeight: 'bold', color: '#D4AF37' }]}>
                             🏆 {selectedMatch.winner.name || selectedMatch.winner_name || 'Won'}
                           </Text>
                         </View>
@@ -326,9 +451,9 @@ const SponsorDashboard = ({
                   {matchDetailsTab === 'Scorecard' && (
                     <View style={styles.scorecardContainer}>
                       <Text style={styles.scorecardTeamTitle}>{selectedMatch.team_a?.name || selectedMatch.team_a_name || 'Team A'} Roster</Text>
-                      <View style={{ marginBottom: 12, paddingLeft: 4 }}>
+                      <View style={{ marginBottom: 16, paddingLeft: 4 }}>
                         {(selectedMatch.team_a?.players || []).map((p, idx) => (
-                          <Text key={idx} style={{ fontSize: 13, color: '#000', marginVertical: 4 }}>
+                          <Text key={idx} style={{ fontSize: 14, color: '#F5F5F5', marginVertical: 6 }}>
                             👤 {p.player?.full_name || p.player?.email || 'Unknown Player'}
                           </Text>
                         ))}
@@ -340,7 +465,7 @@ const SponsorDashboard = ({
                       <Text style={styles.scorecardTeamTitle}>{selectedMatch.team_b?.name || selectedMatch.team_b_name || 'Team B'} Roster</Text>
                       <View style={{ paddingLeft: 4 }}>
                         {(selectedMatch.team_b?.players || []).map((p, idx) => (
-                          <Text key={idx} style={{ fontSize: 13, color: '#000', marginVertical: 4 }}>
+                          <Text key={idx} style={{ fontSize: 14, color: '#F5F5F5', marginVertical: 6 }}>
                             👤 {p.player?.full_name || p.player?.email || 'Unknown Player'}
                           </Text>
                         ))}
@@ -356,6 +481,7 @@ const SponsorDashboard = ({
           </View>
         </View>
       </Modal>
+      </Animated.View>
     </View>
   );
 };
@@ -363,23 +489,28 @@ const SponsorDashboard = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#141414',
     paddingHorizontal: 16,
   },
   tabBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderColor: '#000000',
-    backgroundColor: '#FFFFFF',
+    borderColor: '#2D2D2D',
+    backgroundColor: '#1F1F1F',
+    borderRadius: 8,
+    margin: 12,
+    padding: 4,
   },
   tabButton: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 10,
     alignItems: 'center',
+    borderRadius: 6,
   },
   tabButtonActive: {
-    borderBottomWidth: 3,
-    borderColor: '#000000',
+    backgroundColor: '#2A2A2A',
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
   },
   tabButtonText: {
     fontWeight: 'bold',
@@ -388,7 +519,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   tabButtonTextActive: {
-    color: '#000000',
+    color: '#D4AF37',
   },
   statContainer: {
     marginTop: 16,
@@ -399,23 +530,23 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontWeight: '900',
-    fontSize: 14,
-    color: '#000000',
+    fontSize: 13,
+    color: '#D4AF37',
     marginBottom: 12,
-    letterSpacing: 1,
+    letterSpacing: 1.5,
   },
   emptyText: {
-    color: '#666666',
+    color: '#888888',
     fontSize: 13,
     paddingVertical: 8,
   },
   pledgeCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1F1F1F',
     borderWidth: 1,
-    borderColor: '#000000',
-    borderRadius: 0,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 8,
+    marginBottom: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -425,90 +556,92 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   tournamentName: {
-    color: '#000000',
+    color: '#F5F5F5',
     fontSize: 15,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   tournamentStatus: {
-    color: '#666666',
+    color: '#888888',
     fontSize: 12,
+    marginBottom: 2,
   },
   sponsorshipStatus: {
+    color: '#D4AF37',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  pledgeAmount: {
+    color: '#D4AF37',
+    fontWeight: '900',
+    fontSize: 18,
+  },
+  formCard: {
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 10,
+  },
+  label: {
     color: '#888888',
     fontSize: 11,
     fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  pledgeAmount: {
-    color: '#000000',
-    fontWeight: '900',
-    fontSize: 16,
-  },
-  formCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#000000',
-    borderRadius: 0,
-    padding: 16,
-  },
-  label: {
-    color: '#000000',
-    fontSize: 11,
-    fontWeight: 'bold',
-    marginTop: 12,
-    marginBottom: 6,
-    textTransform: 'uppercase',
+    marginTop: 14,
+    marginBottom: 8,
+    letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: '#FFFFFF',
-    color: '#000000',
-    borderRadius: 0,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: '#2A2A2A',
+    color: '#F5F5F5',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 14,
     borderWidth: 1,
-    borderColor: '#000000',
+    borderColor: '#3D3D3D',
   },
   dropdown: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 0,
-    paddingHorizontal: 12,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 8,
+    paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#000000',
+    borderColor: '#3D3D3D',
   },
   dropdownText: {
-    color: '#000000',
+    color: '#F5F5F5',
     fontSize: 14,
   },
   dropdownArrow: {
-    color: '#000000',
+    color: '#D4AF37',
     fontSize: 12,
   },
   dropdownMenu: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#2A2A2A',
     borderWidth: 1,
-    borderColor: '#000000',
-    borderRadius: 0,
-    marginTop: 2,
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
+    marginTop: 4,
     maxHeight: 150,
+    overflow: 'hidden',
   },
   dropdownItem: {
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
+    borderBottomColor: '#333333',
   },
   dropdownItemText: {
-    color: '#000000',
+    color: '#F5F5F5',
     fontSize: 14,
   },
   submitButton: {
-    backgroundColor: '#000000',
-    borderRadius: 0,
+    backgroundColor: '#D4AF37',
+    borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 20,
@@ -517,28 +650,43 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   submitButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    color: '#141414',
+    fontWeight: '900',
     fontSize: 14,
   },
+  successBox: {
+    backgroundColor: '#1E2C1E',
+    borderWidth: 1,
+    borderColor: '#2E7D32',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 14,
+  },
   successText: {
-    color: '#000000',
+    color: '#81C784',
     fontWeight: 'bold',
     fontSize: 13,
-    marginBottom: 10,
+  },
+  errorBox: {
+    backgroundColor: '#3C1F1F',
+    borderWidth: 1,
+    borderColor: '#C62828',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 14,
   },
   errorText: {
-    color: '#FF0000',
+    color: '#E57373',
     fontWeight: 'bold',
     fontSize: 13,
-    marginBottom: 10,
   },
   matchCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1F1F1F',
     borderWidth: 1,
-    borderColor: '#000000',
-    padding: 16,
-    marginBottom: 10,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -548,54 +696,59 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   matchTeams: {
-    color: '#000000',
-    fontSize: 15,
+    color: '#F5F5F5',
+    fontSize: 16,
     fontWeight: 'bold',
   },
   matchTourneyName: {
     fontSize: 11,
-    color: '#666666',
-    marginVertical: 4,
+    color: '#888888',
+    marginVertical: 6,
   },
   matchSummaryText: {
     fontSize: 12,
-    color: '#000000',
-    fontStyle: 'italic',
+    color: '#D4AF37',
+    fontWeight: '600',
   },
   matchStatusBadge: {
-    backgroundColor: '#000000',
-    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#D4AF37',
+    borderRadius: 8,
     paddingVertical: 4,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(212, 175, 55, 0.05)',
   },
   matchStatusText: {
-    color: '#FFFFFF',
+    color: '#D4AF37',
     fontSize: 10,
     fontWeight: 'bold',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 20,
-    height: '80%',
+    backgroundColor: '#1F1F1F',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '80%',
+    borderTopWidth: 1,
+    borderTopColor: '#2D2D2D',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderColor: '#E0E0E0',
-    paddingBottom: 12,
+    borderColor: '#2D2D2D',
+    paddingBottom: 16,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000000',
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#F5F5F5',
   },
   modalCloseBtn: {
     padding: 4,
@@ -603,29 +756,30 @@ const styles = StyleSheet.create({
   modalCloseBtnText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#000000',
+    color: '#F5F5F5',
   },
   modalTeamsSubTitle: {
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333333',
-    marginVertical: 10,
-    textAlign: 'center',
+    color: '#D4AF37',
+    marginVertical: 14,
   },
   modalTabBar: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderColor: '#EEEEEE',
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
+    overflow: 'hidden',
     marginBottom: 8,
   },
   modalTabButton: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 10,
     alignItems: 'center',
+    backgroundColor: '#1F1F1F',
   },
   modalTabButtonActive: {
-    borderBottomWidth: 2,
-    borderColor: '#000000',
+    backgroundColor: '#2A2A2A',
   },
   modalTabButtonText: {
     fontSize: 12,
@@ -633,28 +787,29 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   modalTabButtonTextActive: {
-    color: '#000000',
+    color: '#D4AF37',
   },
   summaryContainer: {
     paddingVertical: 10,
   },
   summaryStatusBox: {
     borderWidth: 1,
-    borderColor: '#000000',
-    padding: 12,
+    borderColor: '#2D2D2D',
+    backgroundColor: '#2A2A2A',
+    borderRadius: 16,
+    padding: 20,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   summaryStatusTitle: {
     fontSize: 11,
     fontWeight: 'bold',
     color: '#888888',
-    textTransform: 'uppercase',
   },
   summaryStatusVal: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#000000',
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#D4AF37',
     marginTop: 4,
   },
   summaryStatItem: {
@@ -664,24 +819,31 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
     color: '#888888',
-    textTransform: 'uppercase',
   },
   summaryVal: {
-    fontSize: 14,
-    color: '#000000',
+    fontSize: 15,
+    color: '#F5F5F5',
     marginTop: 4,
+    fontWeight: '600',
   },
   scorecardContainer: {
     paddingVertical: 10,
   },
   scorecardTeamTitle: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#000000',
-    marginBottom: 8,
-    borderBottomWidth: 1,
-    borderColor: '#000000',
-    paddingBottom: 4,
+    fontWeight: '900',
+    color: '#D4AF37',
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  emptyStateEmoji: {
+    fontSize: 32,
+    marginBottom: 10,
   },
 });
 

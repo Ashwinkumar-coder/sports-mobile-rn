@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Modal,
+  Animated,
+  Easing,
 } from 'react-native';
 import StatCard from '../widgets/StatCard';
 
@@ -19,6 +21,7 @@ const PlayerDashboard = ({
   players = [],
   apiClient,
   onRefresh,
+  activeTab: parentActiveTab,
 }) => {
   const matches = data.matches_played ?? 0;
   const wins = data.matches_won ?? 0;
@@ -26,7 +29,44 @@ const PlayerDashboard = ({
   const teams = data.team_names ?? [];
 
   // Tab States
-  const [activeTab, setActiveTab] = useState('Overview'); // 'Overview', 'Statistics', 'Matches'
+  const [localTab, setLocalTab] = useState('Overview'); // 'Overview', 'Statistics', 'Matches'
+  const activeTab = parentActiveTab || localTab;
+  const setActiveTab = setLocalTab;
+
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const prevTabRef = useRef(activeTab);
+
+  useEffect(() => {
+    const tabs = ['Overview', 'Statistics', 'Matches'];
+    const prevIndex = tabs.indexOf(prevTabRef.current);
+    const currIndex = tabs.indexOf(activeTab);
+    prevTabRef.current = activeTab;
+
+    if (prevIndex !== -1 && currIndex !== -1 && prevIndex !== currIndex) {
+      const slideStart = currIndex > prevIndex ? 100 : -100;
+      slideAnim.setValue(slideStart);
+      fadeAnim.setValue(0.3);
+
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 250,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 250,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      slideAnim.setValue(0);
+      fadeAnim.setValue(1);
+    }
+  }, [activeTab]);
 
   // Team Registration Form States
   const [selectedTourneyId, setSelectedTourneyId] = useState('');
@@ -46,6 +86,78 @@ const PlayerDashboard = ({
   const [matchDetailsTab, setMatchDetailsTab] = useState('Summary'); // 'Summary', 'Scorecard', 'WagonWheel'
   const [matchesList, setMatchesList] = useState([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
+
+  // Animated scaling for spring tap effects
+  const squadBtnScale = useRef(new Animated.Value(1)).current;
+  // Animated value for oscillating badge
+  const badgePulse = useRef(new Animated.Value(1)).current;
+
+  // Stagger values for match list
+  const listFade = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Oscillating badge infinite pulse loop
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(badgePulse, {
+          toValue: 1.15,
+          duration: 1000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(badgePulse, {
+          toValue: 1,
+          duration: 1000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseLoop.start();
+    return () => pulseLoop.stop();
+  }, []);
+
+  const tabFade = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    tabFade.setValue(0);
+    Animated.timing(tabFade, {
+      toValue: 1,
+      duration: 250,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'Matches') {
+      listFade.setValue(0);
+      Animated.timing(listFade, {
+        toValue: 1,
+        duration: 400,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [activeTab]);
+
+  const handleSquadPressIn = () => {
+    Animated.spring(squadBtnScale, {
+      toValue: 0.95,
+      tension: 160,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handleSquadPressOut = () => {
+    Animated.spring(squadBtnScale, {
+      toValue: 1,
+      tension: 160,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
+  };
 
   // Filter lists based on search queries
   const filteredCoaches = coachSearch
@@ -138,23 +250,27 @@ const PlayerDashboard = ({
 
   return (
     <View style={styles.container}>
-      {/* Black & White Sub-header Tabs */}
-      <View style={styles.tabBar}>
-        {['Overview', 'Statistics', 'Matches'].map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text style={[styles.tabButtonText, activeTab === tab && styles.tabButtonTextActive]}>
-              {tab.toUpperCase()}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {/* Sub-header Tabs */}
+      {!parentActiveTab && (
+        <View style={styles.tabBar}>
+          {['Overview', 'Statistics', 'Matches'].map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              activeOpacity={0.8}
+              style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabButtonText, activeTab === tab && styles.tabButtonTextActive]}>
+                {tab.toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
-      <ScrollView nestedScrollEnabled={true} style={styles.scrollContainer}>
-        {activeTab === 'Overview' && (
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateX: slideAnim }] }}>
+        <ScrollView nestedScrollEnabled={true} style={styles.scrollContainer}>
+          {activeTab === 'Overview' && (
           <View>
             {/* Stats row */}
             <View style={styles.statsRow}>
@@ -171,16 +287,25 @@ const PlayerDashboard = ({
 
             {/* Register Team Form */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>REGISTER TEAM & SQUAD</Text>
+              <Text style={styles.sectionTitle}>Register Team & Squad</Text>
               <View style={styles.formCard}>
-                {message ? <Text style={styles.successText}>{message}</Text> : null}
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                {message ? (
+                  <View style={styles.successBox}>
+                    <Text style={styles.successText}>✓ {message}</Text>
+                  </View>
+                ) : null}
+                {error ? (
+                  <View style={styles.errorBox}>
+                    <Text style={styles.errorText}>⚠ {error}</Text>
+                  </View>
+                ) : null}
 
                 {/* Tournament Selection */}
                 <Text style={styles.label}>Choose Tournament</Text>
                 <TouchableOpacity
                   style={styles.dropdown}
                   onPress={() => setShowTourneys(!showTourneys)}
+                  activeOpacity={0.8}
                 >
                   <Text style={styles.dropdownText}>{getSelectedTourneyLabel()}</Text>
                   <Text style={styles.dropdownArrow}>{showTourneys ? '▲' : '▼'}</Text>
@@ -209,7 +334,7 @@ const PlayerDashboard = ({
                 <TextInput
                   style={styles.input}
                   placeholder="e.g. Chennai Super Kings"
-                  placeholderTextColor="#888"
+                  placeholderTextColor="#666"
                   value={teamName}
                   onChangeText={setTeamName}
                 />
@@ -219,7 +344,7 @@ const PlayerDashboard = ({
                 <TextInput
                   style={styles.input}
                   placeholder="Type to search coach (e.g. John)"
-                  placeholderTextColor="#888"
+                  placeholderTextColor="#666"
                   value={coachSearch}
                   onChangeText={(val) => {
                     setCoachSearch(val);
@@ -255,7 +380,7 @@ const PlayerDashboard = ({
                 <TextInput
                   style={styles.input}
                   placeholder="Type to search player name (e.g. Ashwin)"
-                  placeholderTextColor="#888"
+                  placeholderTextColor="#666"
                   value={playerSearch}
                   onChangeText={setPlayerSearch}
                 />
@@ -271,13 +396,13 @@ const PlayerDashboard = ({
                             key={p.id}
                             style={[
                               styles.suggestionItem,
-                              isSelected && { backgroundColor: '#F0F0F0' },
+                              isSelected && { backgroundColor: '#333333' },
                             ]}
                             onPress={() => {
                               togglePlayerSelect(p.id);
                             }}
                           >
-                            <Text style={styles.suggestionText}>
+                            <Text style={[styles.suggestionText, isSelected && { color: '#D4AF37', fontWeight: 'bold' }]}>
                               {isSelected ? '✓ ' : '+ '}
                               {p.full_name} ({p.email})
                             </Text>
@@ -301,6 +426,7 @@ const PlayerDashboard = ({
                           key={id}
                           style={styles.chip}
                           onPress={() => togglePlayerSelect(id)}
+                          activeOpacity={0.7}
                         >
                           <Text style={styles.chipText}>
                             {p ? p.full_name : `ID: ${id}`} ✕
@@ -311,26 +437,34 @@ const PlayerDashboard = ({
                   </View>
                 )}
 
-                {/* Submit Button */}
-                <TouchableOpacity
-                  style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
-                  onPress={handleRegisterTeam}
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.submitButtonText}>REGISTER SQUAD</Text>
-                  )}
-                </TouchableOpacity>
+                {/* Submit Button with Spring Tap */}
+                <Animated.View style={{ transform: [{ scale: squadBtnScale }] }}>
+                  <TouchableOpacity
+                    style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+                    onPress={handleRegisterTeam}
+                    onPressIn={handleSquadPressIn}
+                    onPressOut={handleSquadPressOut}
+                    disabled={submitting}
+                    activeOpacity={0.9}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator color="#141414" />
+                    ) : (
+                      <Text style={styles.submitButtonText}>Register Squad</Text>
+                    )}
+                  </TouchableOpacity>
+                </Animated.View>
               </View>
             </View>
 
             {/* My Registered Squads */}
             <View style={[styles.section, { marginBottom: 30 }]}>
-              <Text style={styles.sectionTitle}>MY SQUADS</Text>
+              <Text style={styles.sectionTitle}>My Squads</Text>
               {teams.length === 0 ? (
-                <Text style={styles.emptyText}>Not registered in any squads yet.</Text>
+                <View style={styles.emptyStateContainer}>
+                  <Text style={styles.emptyStateEmoji}>🏏</Text>
+                  <Text style={styles.emptyText}>Not registered in any squads yet.</Text>
+                </View>
               ) : (
                 teams.map((t, index) => (
                   <View key={index} style={styles.teamCard}>
@@ -345,56 +479,54 @@ const PlayerDashboard = ({
 
         {activeTab === 'Statistics' && (
           <View style={styles.statsTabContainer}>
-            <Text style={styles.sectionTitle}>PLAYER INDIVIDUAL STATS</Text>
+            <Text style={styles.sectionTitle}>Player Individual Stats</Text>
             <View style={styles.statsCard}>
-              <View style={styles.statRowItem}>
-                <Text style={styles.statLabel}>Matches Played</Text>
-                <Text style={styles.statVal}>{matches}</Text>
-              </View>
-              <View style={styles.statRowItem}>
-                <Text style={styles.statLabel}>Total Runs Scored</Text>
-                <Text style={styles.statVal}>{data.runs_scored ?? 0}</Text>
-              </View>
-              <View style={styles.statRowItem}>
-                <Text style={styles.statLabel}>Balls Faced</Text>
-                <Text style={styles.statVal}>{data.balls_faced ?? 0}</Text>
-              </View>
-              <View style={styles.statRowItem}>
-                <Text style={styles.statLabel}>Batting Strike Rate</Text>
-                <Text style={styles.statVal}>
-                  {data.balls_faced > 0
+              {[
+                { label: 'Matches Played', val: matches },
+                { label: 'Total Runs Scored', val: data.runs_scored ?? 0 },
+                { label: 'Balls Faced', val: data.balls_faced ?? 0 },
+                {
+                  label: 'Batting Strike Rate',
+                  val: data.balls_faced > 0
                     ? ((data.runs_scored / data.balls_faced) * 100).toFixed(2)
-                    : '0.00'}
+                    : '0.00'
+                },
+                { label: 'Wickets Taken', val: data.wickets_taken ?? 0 },
+                { label: 'Runs Conceded', val: data.runs_conceded ?? 0 },
+              ].map((item, index) => (
+                <View key={index} style={styles.statRowItem}>
+                  <Text style={styles.statLabel}>{item.label}</Text>
+                  <Text style={styles.statVal}>{item.val}</Text>
+                </View>
+              ))}
+              
+              {/* Highlight Performance Rating */}
+              <View style={[styles.statRowItem, styles.premiumRatingItem]}>
+                <Text style={[styles.statLabel, { color: '#141414', fontWeight: '900' }]}>Performance Rating Index</Text>
+                <Text style={[styles.statVal, { color: '#141414', fontWeight: '900', fontSize: 18 }]}>
+                  {(data.performance_score ?? 0.0).toFixed(2)}
                 </Text>
-              </View>
-              <View style={styles.statRowItem}>
-                <Text style={styles.statLabel}>Wickets Taken</Text>
-                <Text style={styles.statVal}>{data.wickets_taken ?? 0}</Text>
-              </View>
-              <View style={styles.statRowItem}>
-                <Text style={styles.statLabel}>Runs Conceded</Text>
-                <Text style={styles.statVal}>{data.runs_conceded ?? 0}</Text>
-              </View>
-              <View style={styles.statRowItem}>
-                <Text style={styles.statLabel}>Performance Rating Index</Text>
-                <Text style={styles.statVal}>{(data.performance_score ?? 0.0).toFixed(2)}</Text>
               </View>
             </View>
           </View>
         )}
 
         {activeTab === 'Matches' && (
-          <View>
-            <Text style={styles.sectionTitle}>TOURNAMENT MATCHES</Text>
+          <Animated.View style={{ opacity: listFade }}>
+            <Text style={styles.sectionTitle}>Tournament Matches</Text>
             {loadingMatches ? (
-              <ActivityIndicator color="#000" style={{ marginVertical: 30 }} />
+              <ActivityIndicator color="#D4AF37" style={{ marginVertical: 30 }} />
             ) : matchesList.length === 0 ? (
-              <Text style={styles.emptyText}>No tournament matches scheduled yet.</Text>
+              <View style={styles.emptyStateContainer}>
+                <Text style={styles.emptyStateEmoji}>📅</Text>
+                <Text style={styles.emptyText}>No tournament matches scheduled yet.</Text>
+              </View>
             ) : (
               matchesList.map((match) => (
                 <TouchableOpacity
                   key={match.id}
                   style={styles.matchCard}
+                  activeOpacity={0.95}
                   onPress={() => {
                     setSelectedMatch(match);
                     setMatchDetailsTab('Summary');
@@ -409,13 +541,30 @@ const PlayerDashboard = ({
                       {match.score_summary || 'Live Scoreboard Pending'}
                     </Text>
                   </View>
-                  <View style={styles.matchStatusBadge}>
-                    <Text style={styles.matchStatusText}>{match.status?.toUpperCase()}</Text>
-                  </View>
+
+                  {/* Oscillating Live Status Badge */}
+                  <Animated.View
+                    style={[
+                      styles.matchStatusBadge,
+                      match.status === 'live' && {
+                        borderColor: '#FF3B30',
+                        transform: [{ scale: badgePulse }]
+                      }
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.matchStatusText,
+                        match.status === 'live' && { color: '#FF3B30', fontWeight: '900' }
+                      ]}
+                    >
+                      {match.status?.toUpperCase()}
+                    </Text>
+                  </Animated.View>
                 </TouchableOpacity>
               ))
             )}
-          </View>
+          </Animated.View>
         )}
       </ScrollView>
 
@@ -489,7 +638,7 @@ const PlayerDashboard = ({
                       {selectedMatch.winner && (
                         <View style={styles.summaryStatItem}>
                           <Text style={styles.summaryLabel}>Winner</Text>
-                          <Text style={[styles.summaryVal, { fontWeight: 'bold', color: '#2E7D32' }]}>
+                          <Text style={[styles.summaryVal, { fontWeight: 'bold', color: '#D4AF37' }]}>
                             🏆 {selectedMatch.winner.name || selectedMatch.winner_name || 'Won'}
                           </Text>
                         </View>
@@ -505,9 +654,9 @@ const PlayerDashboard = ({
                   {matchDetailsTab === 'Scorecard' && (
                     <View style={styles.scorecardContainer}>
                       <Text style={styles.scorecardTeamTitle}>{selectedMatch.team_a?.name || selectedMatch.team_a_name || 'Team A'} Roster</Text>
-                      <View style={{ marginBottom: 12, paddingLeft: 4 }}>
+                      <View style={{ marginBottom: 16, paddingLeft: 4 }}>
                         {(selectedMatch.team_a?.players || []).map((p, idx) => (
-                          <Text key={idx} style={{ fontSize: 13, color: '#000', marginVertical: 4 }}>
+                          <Text key={idx} style={{ fontSize: 14, color: '#F5F5F5', marginVertical: 6 }}>
                             👤 {p.player?.full_name || p.player?.email || 'Unknown Player'}
                           </Text>
                         ))}
@@ -519,7 +668,7 @@ const PlayerDashboard = ({
                       <Text style={styles.scorecardTeamTitle}>{selectedMatch.team_b?.name || selectedMatch.team_b_name || 'Team B'} Roster</Text>
                       <View style={{ paddingLeft: 4 }}>
                         {(selectedMatch.team_b?.players || []).map((p, idx) => (
-                          <Text key={idx} style={{ fontSize: 13, color: '#000', marginVertical: 4 }}>
+                          <Text key={idx} style={{ fontSize: 14, color: '#F5F5F5', marginVertical: 6 }}>
                             👤 {p.player?.full_name || p.player?.email || 'Unknown Player'}
                           </Text>
                         ))}
@@ -538,27 +687,23 @@ const PlayerDashboard = ({
                         {/* Crease / Central pitch */}
                         <View style={styles.crease} />
                         {/* Boundaries shots */}
-                        <View style={[styles.shotLine, { transform: [{ rotate: '45deg' }], width: 100, backgroundColor: '#4CAF50' }]} />
-                        <View style={[styles.shotLine, { transform: [{ rotate: '120deg' }], width: 90, backgroundColor: '#E53935' }]} />
-                        <View style={[styles.shotLine, { transform: [{ rotate: '210deg' }], width: 110, backgroundColor: '#4CAF50' }]} />
-                        <View style={[styles.shotLine, { transform: [{ rotate: '315deg' }], width: 80, backgroundColor: '#FFB300' }]} />
+                        <View style={[styles.shotLine, { transform: [{ rotate: '45deg' }], width: 100, backgroundColor: '#D4AF37' }]} />
+                        <View style={[styles.shotLine, { transform: [{ rotate: '120deg' }], width: 90, backgroundColor: '#888888' }]} />
+                        <View style={[styles.shotLine, { transform: [{ rotate: '210deg' }], width: 110, backgroundColor: '#D4AF37' }]} />
+                        <View style={[styles.shotLine, { transform: [{ rotate: '315deg' }], width: 80, backgroundColor: '#555555' }]} />
                         
-                        <Text style={[styles.wheelLabel, { top: 10, left: 100 }]}>Off Side</Text>
-                        <Text style={[styles.wheelLabel, { bottom: 10, left: 100 }]}>On Side</Text>
-                        <Text style={[styles.wheelLabel, { top: 100, left: 10 }]}>Leg</Text>
-                        <Text style={[styles.wheelLabel, { top: 100, right: 10 }]}>Off</Text>
+                        <Text style={[styles.wheelLabel, { top: 12, left: 100 }]}>Off Side</Text>
+                        <Text style={[styles.wheelLabel, { bottom: 12, left: 100 }]}>On Side</Text>
+                        <Text style={[styles.wheelLabel, { top: 100, left: 12 }]}>Leg</Text>
+                        <Text style={[styles.wheelLabel, { top: 100, right: 12 }]}>Off</Text>
                       </View>
                       <View style={styles.wagonLegend}>
                         <View style={styles.legendItem}>
-                          <View style={[styles.legendDot, { backgroundColor: '#4CAF50' }]} />
-                          <Text style={styles.legendText}>6 Runs (Sixes)</Text>
+                          <View style={[styles.legendDot, { backgroundColor: '#D4AF37' }]} />
+                          <Text style={styles.legendText}>Boundaries / Sixes</Text>
                         </View>
                         <View style={styles.legendItem}>
-                          <View style={[styles.legendDot, { backgroundColor: '#FFB300' }]} />
-                          <Text style={styles.legendText}>4 Runs (Boundaries)</Text>
-                        </View>
-                        <View style={styles.legendItem}>
-                          <View style={[styles.legendDot, { backgroundColor: '#E53935' }]} />
+                          <View style={[styles.legendDot, { backgroundColor: '#888888' }]} />
                           <Text style={styles.legendText}>Singles / Doubles</Text>
                         </View>
                       </View>
@@ -570,6 +715,7 @@ const PlayerDashboard = ({
           </View>
         </View>
       </Modal>
+      </Animated.View>
     </View>
   );
 };
@@ -577,30 +723,37 @@ const PlayerDashboard = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#141414',
   },
   tabBar: {
     flexDirection: 'row',
-    borderBottomWidth: 2,
-    borderBottomColor: '#000000',
-    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2D2D2D',
+    marginBottom: 20,
+    backgroundColor: '#1F1F1F',
+    borderRadius: 8,
+    overflow: 'hidden',
+    padding: 4,
   },
   tabButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 10,
     alignItems: 'center',
+    borderRadius: 6,
   },
   tabButtonActive: {
-    backgroundColor: '#000000',
+    backgroundColor: '#2A2A2A',
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
   },
   tabButtonText: {
-    color: '#000000',
+    color: '#888888',
     fontWeight: 'bold',
     fontSize: 12,
     letterSpacing: 0.5,
   },
   tabButtonTextActive: {
-    color: '#FFFFFF',
+    color: '#D4AF37',
   },
   scrollContainer: {
     flex: 1,
@@ -620,99 +773,102 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontWeight: '900',
-    fontSize: 14,
-    color: '#000000',
-    marginBottom: 10,
-    letterSpacing: 1,
+    fontSize: 13,
+    color: '#D4AF37',
+    marginBottom: 12,
+    letterSpacing: 1.5,
   },
   formCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1F1F1F',
     borderWidth: 1,
-    borderColor: '#000000',
-    borderRadius: 0,
-    padding: 16,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 20,
   },
   label: {
-    color: '#000000',
+    color: '#888888',
     fontSize: 11,
-    fontWeight: 'bold',
-    marginTop: 12,
-    marginBottom: 6,
-    textTransform: 'uppercase',
+    fontWeight: '700',
+    marginTop: 14,
+    marginBottom: 8,
+    letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: '#FFFFFF',
-    color: '#000000',
-    borderRadius: 0,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: '#2A2A2A',
+    color: '#F5F5F5',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 14,
     borderWidth: 1,
-    borderColor: '#000000',
+    borderColor: '#3D3D3D',
     marginBottom: 4,
   },
   dropdown: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 0,
-    paddingHorizontal: 12,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 8,
+    paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#000000',
+    borderColor: '#3D3D3D',
   },
   dropdownText: {
-    color: '#000000',
+    color: '#F5F5F5',
     fontSize: 14,
   },
   dropdownArrow: {
-    color: '#000000',
+    color: '#D4AF37',
     fontSize: 12,
   },
   dropdownMenu: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#2A2A2A',
     borderWidth: 1,
-    borderColor: '#000000',
-    borderRadius: 0,
-    marginTop: 2,
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
+    marginTop: 4,
     maxHeight: 150,
+    overflow: 'hidden',
   },
   dropdownItem: {
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
+    borderBottomColor: '#333333',
   },
   dropdownItemText: {
-    color: '#000000',
+    color: '#F5F5F5',
     fontSize: 14,
   },
   suggestionsContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#2A2A2A',
     borderWidth: 1,
-    borderColor: '#000000',
+    borderColor: '#3D3D3D',
     maxHeight: 150,
-    marginTop: 2,
+    marginTop: 4,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   suggestionItem: {
-    padding: 10,
+    padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
+    borderBottomColor: '#333333',
   },
   suggestionText: {
-    color: '#000000',
+    color: '#F5F5F5',
     fontSize: 13,
   },
   suggestionEmpty: {
-    padding: 10,
+    padding: 12,
     color: '#888888',
     fontSize: 13,
   },
   selectionLabel: {
-    color: '#000000',
+    color: '#D4AF37',
     fontWeight: 'bold',
     fontSize: 12,
-    marginTop: 6,
+    marginTop: 8,
   },
   chipsContainer: {
     flexDirection: 'row',
@@ -721,42 +877,46 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   chip: {
-    backgroundColor: '#000000',
-    borderRadius: 0,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
     paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
   },
   chipText: {
-    color: '#FFFFFF',
+    color: '#D4AF37',
     fontSize: 12,
     fontWeight: 'bold',
   },
   emptyText: {
-    color: '#666666',
+    color: '#888888',
     fontSize: 13,
     paddingVertical: 8,
   },
   teamCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1F1F1F',
     borderWidth: 1,
-    borderColor: '#000000',
+    borderColor: '#2D2D2D',
     padding: 16,
-    marginBottom: 8,
+    marginBottom: 10,
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
   },
   teamIcon: {
     fontSize: 18,
     marginRight: 12,
+    color: '#D4AF37',
   },
   teamName: {
-    color: '#000000',
+    color: '#F5F5F5',
     fontSize: 15,
     fontWeight: 'bold',
   },
   submitButton: {
-    backgroundColor: '#000000',
-    borderRadius: 0,
+    backgroundColor: '#D4AF37',
+    borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 20,
@@ -765,114 +925,141 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   submitButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    color: '#141414',
+    fontWeight: '900',
     fontSize: 14,
   },
+  successBox: {
+    backgroundColor: '#1E2C1E',
+    borderWidth: 1,
+    borderColor: '#2E7D32',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 14,
+  },
   successText: {
-    color: '#000000',
+    color: '#81C784',
     fontWeight: 'bold',
     fontSize: 13,
-    marginBottom: 10,
+  },
+  errorBox: {
+    backgroundColor: '#3C1F1F',
+    borderWidth: 1,
+    borderColor: '#C62828',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 14,
   },
   errorText: {
-    color: '#FF0000',
+    color: '#E57373',
     fontWeight: 'bold',
     fontSize: 13,
-    marginBottom: 10,
   },
   statsTabContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 0,
+    backgroundColor: '#141414',
   },
   statsCard: {
+    backgroundColor: '#1F1F1F',
     borderWidth: 1,
-    borderColor: '#000000',
-    padding: 16,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 20,
   },
   statRowItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
+    borderBottomColor: '#2D2D2D',
   },
   statLabel: {
-    color: '#666666',
+    color: '#888888',
     fontSize: 14,
+    fontWeight: '600',
   },
   statVal: {
-    color: '#000000',
+    color: '#F5F5F5',
     fontSize: 14,
     fontWeight: 'bold',
   },
+  premiumRatingItem: {
+    backgroundColor: '#D4AF37',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginTop: 16,
+    borderBottomWidth: 0,
+  },
   matchCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1F1F1F',
     borderWidth: 1,
-    borderColor: '#000000',
-    padding: 16,
-    marginBottom: 10,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   matchMain: {
     flex: 1,
-    paddingRight: 8,
+    paddingRight: 12,
   },
   matchTeams: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#000000',
-    marginBottom: 4,
+    color: '#F5F5F5',
+    marginBottom: 6,
   },
   matchTourneyName: {
     fontSize: 12,
-    color: '#666666',
-    marginBottom: 6,
+    color: '#888888',
+    marginBottom: 8,
   },
   matchSummaryText: {
     fontSize: 12,
-    color: '#000000',
-    fontFamily: 'Courier',
+    color: '#D4AF37',
+    fontWeight: '600',
   },
   matchStatusBadge: {
     borderWidth: 1,
-    borderColor: '#000000',
+    borderColor: '#D4AF37',
+    borderRadius: 8,
     paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(212, 175, 55, 0.05)',
   },
   matchStatusText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#000000',
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#D4AF37',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderTopWidth: 2,
-    borderTopColor: '#000000',
+    backgroundColor: '#1F1F1F',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#2D2D2D',
     maxHeight: '85%',
-    padding: 20,
+    padding: 24,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 10,
+    paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
+    borderBottomColor: '#2D2D2D',
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '900',
-    color: '#000000',
+    color: '#F5F5F5',
   },
   modalCloseBtn: {
     padding: 6,
@@ -880,138 +1067,112 @@ const styles = StyleSheet.create({
   modalCloseBtnText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#000000',
+    color: '#F5F5F5',
   },
   modalTeamsSubTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#000000',
-    marginVertical: 10,
+    color: '#D4AF37',
+    marginVertical: 14,
   },
   modalTabBar: {
     flexDirection: 'row',
     borderWidth: 1,
-    borderColor: '#000000',
-    borderRadius: 0,
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
     overflow: 'hidden',
   },
   modalTabButton: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1F1F1F',
   },
   modalTabButtonActive: {
-    backgroundColor: '#000000',
+    backgroundColor: '#2A2A2A',
   },
   modalTabButtonText: {
-    color: '#000000',
+    color: '#888888',
     fontSize: 12,
     fontWeight: 'bold',
   },
   modalTabButtonTextActive: {
-    color: '#FFFFFF',
+    color: '#D4AF37',
   },
   summaryContainer: {
-    padding: 10,
+    padding: 6,
   },
   summaryStatusBox: {
     borderWidth: 1,
-    borderColor: '#000000',
-    padding: 16,
-    marginBottom: 16,
+    borderColor: '#2D2D2D',
+    backgroundColor: '#2A2A2A',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
     alignItems: 'center',
   },
   summaryStatusTitle: {
-    fontSize: 12,
-    color: '#666666',
-    marginBottom: 4,
-    textTransform: 'uppercase',
+    fontSize: 11,
+    color: '#888888',
+    marginBottom: 6,
+    fontWeight: '700',
   },
   summaryStatusVal: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '900',
-    color: '#000000',
+    color: '#D4AF37',
   },
   summaryStatItem: {
-    marginBottom: 14,
+    marginBottom: 18,
   },
   summaryLabel: {
-    fontSize: 12,
-    color: '#666666',
+    fontSize: 11,
+    color: '#888888',
     fontWeight: 'bold',
-    marginBottom: 2,
-    textTransform: 'uppercase',
+    marginBottom: 6,
   },
   summaryVal: {
-    fontSize: 14,
-    color: '#000000',
-    fontWeight: '500',
+    fontSize: 15,
+    color: '#F5F5F5',
+    fontWeight: '600',
   },
   scorecardContainer: {
-    padding: 10,
+    padding: 6,
   },
   scorecardTeamTitle: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#000000',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#000000',
-    paddingBottom: 6,
-    marginBottom: 6,
-  },
-  tableRow: {
-    flexDirection: 'row',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
-  },
-  colName: {
-    flex: 2,
-    fontSize: 13,
-    color: '#000000',
-  },
-  colVal: {
-    flex: 1,
-    fontSize: 13,
-    color: '#000000',
-    textAlign: 'center',
-  },
-  bold: {
-    fontWeight: 'bold',
+    fontWeight: '900',
+    color: '#D4AF37',
+    marginBottom: 12,
+    letterSpacing: 0.5,
   },
   wagonWheelContainer: {
     alignItems: 'center',
     padding: 10,
   },
   wagonTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
-    color: '#000000',
-    marginBottom: 16,
+    color: '#F5F5F5',
+    marginBottom: 20,
   },
   wheelCircle: {
     width: 220,
     height: 220,
     borderRadius: 110,
     borderWidth: 2,
-    borderColor: '#000000',
+    borderColor: '#3D3D3D',
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#2A2A2A',
   },
   crease: {
     width: 40,
     height: 12,
     borderWidth: 1,
-    borderColor: '#000000',
-    backgroundColor: '#E0E0E0',
+    borderColor: '#3D3D3D',
+    backgroundColor: '#1F1F1F',
     position: 'absolute',
   },
   shotLine: {
@@ -1027,9 +1188,11 @@ const styles = StyleSheet.create({
     color: '#888888',
   },
   wagonLegend: {
-    marginTop: 20,
+    marginTop: 24,
     width: '100%',
-    gap: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
   },
   legendItem: {
     flexDirection: 'row',
@@ -1043,7 +1206,16 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 12,
-    color: '#333333',
+    color: '#888888',
+  },
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  emptyStateEmoji: {
+    fontSize: 32,
+    marginBottom: 10,
   },
 });
 
