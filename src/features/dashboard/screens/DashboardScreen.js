@@ -187,17 +187,12 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
   );
 
   // Custom Bell Icon Component
-  const BellIcon = ({ color, count }) => (
+  const BellIcon = ({ color }) => (
     <View style={styles.bellIconContainer}>
       <View style={[styles.bellLoop, { borderColor: color }]} />
       <View style={[styles.bellBody, { backgroundColor: color }]} />
       <View style={[styles.bellLip, { backgroundColor: color }]} />
       <View style={[styles.bellClapper, { backgroundColor: color }]} />
-      {count > 0 && (
-        <View style={styles.bellBadge}>
-          <Text style={styles.bellBadgeText}>{count}</Text>
-        </View>
-      )}
     </View>
   );
 
@@ -288,7 +283,7 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
       <View style={styles.header}>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.notifyButton} onPress={() => setShowNotifications(true)}>
-            <BellIcon color="#F5F5F5" count={notifications.length} />
+            <BellIcon color="#F5F5F5" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.logoutButton} onPress={onLogout} activeOpacity={0.7}>
             <LogoutIcon color="#F5F5F5" />

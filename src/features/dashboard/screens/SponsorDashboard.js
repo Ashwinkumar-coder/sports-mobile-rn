@@ -199,10 +199,8 @@ const SponsorDashboard = ({
   };
 
   useEffect(() => {
-    if (activeTab === 'Matches') {
-      fetchMatches();
-    }
-  }, [activeTab, tournaments]);
+    fetchMatches();
+  }, [tournaments]);
 
   const handlePledge = async () => {
     if (!selectedTourneyId || !amount) {
@@ -255,28 +253,7 @@ const SponsorDashboard = ({
     return tourney ? tourney.name : 'Select Tournament';
   };
 
-  // ROI summary math
-  const getRoiSummary = () => {
-    let reach = 0;
-    let clicks = 0;
-    let activePledges = 0;
 
-    pledgesList.forEach(p => {
-      if (p.status === 'active') {
-        reach += p.impressions ?? 0;
-        clicks += p.clicks ?? 0;
-        activePledges += 1;
-      }
-    });
-
-    const reachStr = reach > 1000 ? `${(reach / 1000).toFixed(1)}K` : `${reach}`;
-    const clickStr = clicks > 1000 ? `${(clicks / 1000).toFixed(1)}K` : `${clicks}`;
-    const roiFactor = activePledges > 0 ? (1.52).toFixed(2) : '0.00';
-
-    return { reachStr, clickStr, roiFactor };
-  };
-
-  const { reachStr, clickStr, roiFactor } = getRoiSummary();
 
   // Budget calculations
   const totalBudget = 50000;
@@ -284,6 +261,79 @@ const SponsorDashboard = ({
   const approvedTotal = pledgesList.filter(p => p.status?.toLowerCase() === 'approved').reduce((sum, item) => sum + (item.amount ?? 0), 0);
   const spentTotal = pledgesList.filter(p => p.status?.toLowerCase() === 'active').reduce((sum, item) => sum + (item.amount ?? 0), 0);
   const remainingBudget = totalBudget - pledgedTotal - approvedTotal - spentTotal;
+
+  // Get active or approved sponsored tournaments
+  const getSponsoredTourneys = () => {
+    const sponsoredNames = pledgesList
+      .filter(p => ['active', 'approved'].includes(p.status?.toLowerCase()))
+      .map(p => p.tournament_name);
+    return tournaments.filter(t => sponsoredNames.includes(t.name));
+  };
+
+  // Calculate standings from match results for a tournament
+  const getStandingsForTournament = (tournament) => {
+    if (!tournament || !tournament.teams) return [];
+    
+    const stats = tournament.teams.map(team => ({
+      id: team.id,
+      name: team.name,
+      played: 0,
+      won: 0,
+      lost: 0,
+      points: 0,
+      status: team.status,
+    }));
+    
+    // Filter completed matches for this tournament
+    const completedMatches = matchesList.filter(m => 
+      m.tournament_id === tournament.id && m.status?.toLowerCase() === 'completed'
+    );
+    
+    completedMatches.forEach(m => {
+      const teamA = stats.find(s => s.id === m.team_a_id);
+      const teamB = stats.find(s => s.id === m.team_b_id);
+      
+      if (teamA && teamB) {
+        teamA.played += 1;
+        teamB.played += 1;
+        
+        if (m.winner_id === m.team_a_id) {
+          teamA.won += 1;
+          teamA.points += 2;
+          teamB.lost += 1;
+        } else if (m.winner_id === m.team_b_id) {
+          teamB.won += 1;
+          teamB.points += 2;
+          teamA.lost += 1;
+        }
+      }
+    });
+    
+    return stats.sort((a, b) => b.points - a.points || b.won - a.won);
+  };
+
+  // Fetch top players (MVPs) in the sponsored tournaments
+  const getTopMvps = () => {
+    const sponsored = getSponsoredTourneys();
+    const allPlayers = [];
+    
+    sponsored.forEach(t => {
+      t.teams.forEach(team => {
+        team.players.forEach(p => {
+          allPlayers.push({
+            id: p.player_id,
+            name: p.player?.full_name || 'Unknown Player',
+            teamName: team.name,
+            runs: p.runs_scored ?? 0,
+            wickets: p.wickets_taken ?? 0,
+            performance: p.performance_score ?? 0.0,
+          });
+        });
+      });
+    });
+    
+    return allPlayers.sort((a, b) => b.performance - a.performance).slice(0, 5);
+  };
 
   // Filtered pledges list
   const getFilteredPledges = () => {
@@ -348,22 +398,7 @@ const SponsorDashboard = ({
       <ScrollView style={styles.container} nestedScrollEnabled={true} contentContainerStyle={{ paddingBottom: 40 }}>
         {activeTab === 'Sponsorships' && (
           <View>
-            {/* ROI summary card widgets */}
-            <Text style={styles.sectionTitle}>SPONSOR ROI INSIGHTS</Text>
-            <View style={styles.roiRow}>
-              <View style={styles.roiCard}>
-                <Text style={styles.roiVal}>{reachStr}</Text>
-                <Text style={styles.roiLabel}>Total Reach</Text>
-              </View>
-              <View style={styles.roiCard}>
-                <Text style={styles.roiVal}>{clickStr}</Text>
-                <Text style={styles.roiLabel}>Brand Clicks</Text>
-              </View>
-              <View style={styles.roiCard}>
-                <Text style={[styles.roiVal, { color: '#4CD964' }]}>{roiFactor}x</Text>
-                <Text style={styles.roiLabel}>Avg ROI Factor</Text>
-              </View>
-            </View>
+
 
             {/* Budget overview breakdown */}
             <View style={styles.budgetCard}>
@@ -396,6 +431,70 @@ const SponsorDashboard = ({
                 </View>
               </View>
             </View>
+
+            {/* Sponsored Standings and MVPs */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>SPONSORED TOURNAMENTS STANDINGS</Text>
+              {getSponsoredTourneys().length === 0 ? (
+                <View style={styles.emptyStateContainer}>
+                  <Text style={styles.emptyStateEmoji}>🏆</Text>
+                  <Text style={styles.emptyText}>No active sponsored tournaments yet. Sponsor a tournament below to view live standings.</Text>
+                </View>
+              ) : (
+                getSponsoredTourneys().map(t => {
+                  const standings = getStandingsForTournament(t);
+                  return (
+                    <View key={t.id} style={styles.standingsCard}>
+                      <Text style={styles.standingsTourneyTitle}>{t.name.toUpperCase()}</Text>
+                      
+                      {/* Table Header */}
+                      <View style={styles.tableHeaderRow}>
+                        <Text style={styles.tableHeaderTeamCol}>TEAM</Text>
+                        <Text style={styles.tableHeaderCol}>P</Text>
+                        <Text style={styles.tableHeaderCol}>W</Text>
+                        <Text style={styles.tableHeaderCol}>L</Text>
+                        <Text style={styles.tableHeaderCol}>PTS</Text>
+                      </View>
+                      
+                      {/* Table Rows */}
+                      {standings.map(team => (
+                        <View key={team.id} style={styles.tableRow}>
+                          <Text style={styles.teamNameCol} numberOfLines={1}>{team.name}</Text>
+                          <Text style={styles.statsCol}>{team.played}</Text>
+                          <Text style={styles.statsCol}>{team.won}</Text>
+                          <Text style={styles.statsCol}>{team.lost}</Text>
+                          <Text style={styles.pointsCol}>{team.points}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+
+            {getSponsoredTourneys().length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>TOP SPONSORED SQUAD PLAYERS (MVP)</Text>
+                <View style={styles.leaderboardCard}>
+                  {getTopMvps().length === 0 ? (
+                    <Text style={styles.emptyText}>No player stats available yet.</Text>
+                  ) : (
+                    getTopMvps().map((mvp, idx) => (
+                      <View key={idx} style={styles.leaderRow}>
+                        <Text style={styles.leaderRank}>{idx + 1}</Text>
+                        <View style={styles.leaderMeta}>
+                          <Text style={styles.leaderTourneyName}>{mvp.name}</Text>
+                          <Text style={styles.leaderReach}>
+                            {mvp.teamName} • {mvp.runs} runs • {mvp.wickets} wkts
+                          </Text>
+                        </View>
+                        <Text style={styles.leaderIdx}>{mvp.performance.toFixed(0)} PTS</Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+              </View>
+            )}
 
             {/* Sponsor a tournament form */}
             <View style={styles.section}>
@@ -482,7 +581,6 @@ const SponsorDashboard = ({
                     <Text style={styles.leaderTourneyName}>State Championship Series</Text>
                     <Text style={styles.leaderReach}>14.8K Viewers avg • 12 Teams</Text>
                   </View>
-                  <Text style={styles.leaderIdx}>INDEX 9.8</Text>
                 </View>
                 <View style={styles.leaderRow}>
                   <Text style={styles.leaderRank}>2</Text>
@@ -490,7 +588,6 @@ const SponsorDashboard = ({
                     <Text style={styles.leaderTourneyName}>Premier T20 Cup</Text>
                     <Text style={styles.leaderReach}>9.4K Viewers avg • 10 Teams</Text>
                   </View>
-                  <Text style={styles.leaderIdx}>INDEX 8.2</Text>
                 </View>
                 <View style={styles.leaderRow}>
                   <Text style={styles.leaderRank}>3</Text>
@@ -498,7 +595,6 @@ const SponsorDashboard = ({
                     <Text style={styles.leaderTourneyName}>District Knockout Trophy</Text>
                     <Text style={styles.leaderReach}>6.1K Viewers avg • 8 Teams</Text>
                   </View>
-                  <Text style={styles.leaderIdx}>INDEX 6.5</Text>
                 </View>
               </View>
             </View>
@@ -1105,32 +1201,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   // ROI / Budget Premium Card Styles
-  roiRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-  },
-  roiCard: {
-    flex: 1,
-    backgroundColor: '#1F1F1F',
-    borderWidth: 1,
-    borderColor: '#2D2D2D',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-  },
-  roiVal: {
-    color: '#D4AF37',
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  roiLabel: {
-    color: '#888',
-    fontSize: 9,
-    fontWeight: 'bold',
-    marginTop: 4,
-    letterSpacing: 0.5,
-  },
+
   budgetCard: {
     backgroundColor: '#1F1F1F',
     borderWidth: 1,
@@ -1319,6 +1390,70 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 8,
     marginTop: 2,
+  },
+  standingsCard: {
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+  },
+  standingsTourneyTitle: {
+    color: '#D4AF37',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2D2D2D',
+    paddingBottom: 8,
+  },
+  tableHeaderRow: {
+    flexDirection: 'row',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+    marginBottom: 8,
+  },
+  tableHeaderTeamCol: {
+    flex: 3,
+    color: '#888888',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  tableHeaderCol: {
+    flex: 1,
+    color: '#888888',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#252525',
+    alignItems: 'center',
+  },
+  teamNameCol: {
+    flex: 3,
+    color: '#F5F5F5',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  statsCol: {
+    flex: 1,
+    color: '#888888',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  pointsCol: {
+    flex: 1,
+    color: '#D4AF37',
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
   },
 });
 
