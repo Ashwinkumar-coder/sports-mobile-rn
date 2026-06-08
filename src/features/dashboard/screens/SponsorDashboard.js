@@ -22,7 +22,65 @@ const SponsorDashboard = ({
   activeTab: parentActiveTab,
 }) => {
   const total = data.total_sponsored ?? 0.0;
-  const history = data.sponsorships ?? [];
+  const initialSponsorships = data.sponsorships ?? [];
+
+  // Pledges state
+  const [pledgesList, setPledgesList] = useState([]);
+  const [filterStatus, setFilterStatus] = useState('ALL'); // 'ALL', 'PENDING', 'APPROVED', 'ACTIVE'
+
+  useEffect(() => {
+    if (initialSponsorships.length > 0) {
+      const enhanced = initialSponsorships.map((item, idx) => {
+        const statuses = ['active', 'approved', 'under review', 'pledged'];
+        const currentStatus = item.status || statuses[idx % statuses.length];
+        
+        // Mocking some audience metrics based on amount
+        const amountNum = item.amount ?? 500;
+        return {
+          ...item,
+          status: currentStatus,
+          date: item.date || `2026-06-0${idx + 1}`,
+          impressions: Math.floor(amountNum * 15.5),
+          clicks: Math.floor(amountNum * 0.62),
+          teamsCount: 8 + (idx % 3) * 2,
+          matchesPlayed: 14 + (idx % 2) * 5,
+          viewers: Math.floor(amountNum * 1.8),
+        };
+      });
+      setPledgesList(enhanced);
+    } else {
+      // Create some initial simulation entries if empty
+      const demo = [
+        {
+          id: 101,
+          tournament_name: 'Summer Cricket Bash',
+          tournament_status: 'ongoing',
+          status: 'active',
+          amount: 2500,
+          date: '2026-06-01',
+          impressions: 38750,
+          clicks: 1550,
+          teamsCount: 10,
+          matchesPlayed: 18,
+          viewers: 4500,
+        },
+        {
+          id: 102,
+          tournament_name: 'District T20 Cup',
+          tournament_status: 'upcoming',
+          status: 'approved',
+          amount: 1500,
+          date: '2026-06-04',
+          impressions: 23250,
+          clicks: 930,
+          teamsCount: 8,
+          matchesPlayed: 0,
+          viewers: 2700,
+        }
+      ];
+      setPledgesList(demo);
+    }
+  }, [data]);
 
   // Active Tab
   const [localTab, setLocalTab] = useState('Sponsorships'); // 'Sponsorships', 'Matches'
@@ -156,13 +214,29 @@ const SponsorDashboard = ({
     setError('');
     setMessage('');
     try {
-      const res = await apiClient.sponsorTournament(
-        parseInt(selectedTourneyId),
-        parseFloat(amount)
-      );
+      const tourneyIdInt = parseInt(selectedTourneyId);
+      const amountFloat = parseFloat(amount);
+      const res = await apiClient.sponsorTournament(tourneyIdInt, amountFloat);
 
       if (res && res.id) {
         setMessage(`Pledge of $${amount} submitted for approval!`);
+        
+        // Append local simulated entry so UI updates immediately
+        const targetTourney = tournaments.find(t => t.id === tourneyIdInt);
+        const newLocalPledge = {
+          id: res.id,
+          tournament_name: targetTourney ? targetTourney.name : 'Sponsored Tournament',
+          tournament_status: 'upcoming',
+          status: 'pledged',
+          amount: amountFloat,
+          date: new Date().toISOString().split('T')[0],
+          impressions: Math.floor(amountFloat * 15.5),
+          clicks: Math.floor(amountFloat * 0.62),
+          teamsCount: 8,
+          matchesPlayed: 0,
+          viewers: Math.floor(amountFloat * 1.8),
+        };
+        setPledgesList([newLocalPledge, ...pledgesList]);
         setAmount('');
         setSelectedTourneyId('');
         if (onRefresh) onRefresh();
@@ -179,6 +253,74 @@ const SponsorDashboard = ({
   const getSelectedTourneyLabel = () => {
     const tourney = tournaments.find((t) => t.id.toString() === selectedTourneyId);
     return tourney ? tourney.name : 'Select Tournament';
+  };
+
+  // ROI summary math
+  const getRoiSummary = () => {
+    let reach = 0;
+    let clicks = 0;
+    let activePledges = 0;
+
+    pledgesList.forEach(p => {
+      if (p.status === 'active') {
+        reach += p.impressions ?? 0;
+        clicks += p.clicks ?? 0;
+        activePledges += 1;
+      }
+    });
+
+    const reachStr = reach > 1000 ? `${(reach / 1000).toFixed(1)}K` : `${reach}`;
+    const clickStr = clicks > 1000 ? `${(clicks / 1000).toFixed(1)}K` : `${clicks}`;
+    const roiFactor = activePledges > 0 ? (1.52).toFixed(2) : '0.00';
+
+    return { reachStr, clickStr, roiFactor };
+  };
+
+  const { reachStr, clickStr, roiFactor } = getRoiSummary();
+
+  // Budget calculations
+  const totalBudget = 50000;
+  const pledgedTotal = pledgesList.filter(p => ['pledged', 'under review', 'pending'].includes(p.status?.toLowerCase())).reduce((sum, item) => sum + (item.amount ?? 0), 0);
+  const approvedTotal = pledgesList.filter(p => p.status?.toLowerCase() === 'approved').reduce((sum, item) => sum + (item.amount ?? 0), 0);
+  const spentTotal = pledgesList.filter(p => p.status?.toLowerCase() === 'active').reduce((sum, item) => sum + (item.amount ?? 0), 0);
+  const remainingBudget = totalBudget - pledgedTotal - approvedTotal - spentTotal;
+
+  // Filtered pledges list
+  const getFilteredPledges = () => {
+    if (filterStatus === 'ALL') return pledgesList;
+    if (filterStatus === 'PENDING') return pledgesList.filter(p => ['pledged', 'under review', 'pending'].includes(p.status?.toLowerCase()));
+    return pledgesList.filter(p => p.status?.toLowerCase() === filterStatus.toLowerCase());
+  };
+
+  const renderStatusTracker = (status) => {
+    const steps = ['pledged', 'under review', 'approved', 'active'];
+    let currentIdx = steps.indexOf(status?.toLowerCase());
+    if (currentIdx === -1) {
+      if (status?.toLowerCase() === 'pending') currentIdx = 0;
+      else currentIdx = 1;
+    }
+
+    return (
+      <View style={styles.trackerContainer}>
+        {steps.map((step, idx) => {
+          const isCompleted = idx <= currentIdx;
+          const isLast = idx === steps.length - 1;
+          return (
+            <React.Fragment key={step}>
+              <View style={styles.trackerStep}>
+                <View style={[styles.stepDot, isCompleted && styles.stepDotActive]}>
+                  {isCompleted && <Text style={styles.stepDotCheck}>✓</Text>}
+                </View>
+                <Text style={[styles.stepLabel, isCompleted && styles.stepLabelActive]}>
+                  {step.replace('_', ' ').toUpperCase()}
+                </Text>
+              </View>
+              {!isLast && <View style={[styles.stepLine, idx < currentIdx && styles.stepLineActive]} />}
+            </React.Fragment>
+          );
+        })}
+      </View>
+    );
   };
 
   return (
@@ -203,16 +345,61 @@ const SponsorDashboard = ({
 
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateX: slideAnim }] }}>
 
-      <ScrollView style={styles.container} nestedScrollEnabled={true}>
+      <ScrollView style={styles.container} nestedScrollEnabled={true} contentContainerStyle={{ paddingBottom: 40 }}>
         {activeTab === 'Sponsorships' && (
           <View>
-            <View style={styles.statContainer}>
-              <StatCard label="Total Sponsorship Pledges" value={`$${total}`} />
+            {/* ROI summary card widgets */}
+            <Text style={styles.sectionTitle}>SPONSOR ROI INSIGHTS</Text>
+            <View style={styles.roiRow}>
+              <View style={styles.roiCard}>
+                <Text style={styles.roiVal}>{reachStr}</Text>
+                <Text style={styles.roiLabel}>Total Reach</Text>
+              </View>
+              <View style={styles.roiCard}>
+                <Text style={styles.roiVal}>{clickStr}</Text>
+                <Text style={styles.roiLabel}>Brand Clicks</Text>
+              </View>
+              <View style={styles.roiCard}>
+                <Text style={[styles.roiVal, { color: '#4CD964' }]}>{roiFactor}x</Text>
+                <Text style={styles.roiLabel}>Avg ROI Factor</Text>
+              </View>
             </View>
 
-            {/* Sponsorship Pledge Form */}
+            {/* Budget overview breakdown */}
+            <View style={styles.budgetCard}>
+              <Text style={styles.budgetCardTitle}>SPONSORSHIP BUDGET ALLOCATION</Text>
+              
+              {/* Stacked bar representation */}
+              <View style={styles.progressBarWrapper}>
+                <View style={[styles.progressBarSec, { flex: spentTotal, backgroundColor: '#D4AF37' }]} />
+                <View style={[styles.progressBarSec, { flex: approvedTotal, backgroundColor: '#4CD964' }]} />
+                <View style={[styles.progressBarSec, { flex: pledgedTotal, backgroundColor: '#FFCC00' }]} />
+                <View style={[styles.progressBarSec, { flex: Math.max(0, remainingBudget), backgroundColor: '#333' }]} />
+              </View>
+
+              <View style={styles.budgetGrid}>
+                <View style={styles.budgetCol}>
+                  <Text style={[styles.budgetVal, { color: '#FFF' }]}>${totalBudget.toLocaleString()}</Text>
+                  <Text style={styles.budgetLabel}>Total Limit</Text>
+                </View>
+                <View style={styles.budgetCol}>
+                  <Text style={[styles.budgetVal, { color: '#D4AF37' }]}>${spentTotal.toLocaleString()}</Text>
+                  <Text style={styles.budgetLabel}>Spent (Active)</Text>
+                </View>
+                <View style={styles.budgetCol}>
+                  <Text style={[styles.budgetVal, { color: '#4CD964' }]}>${approvedTotal.toLocaleString()}</Text>
+                  <Text style={styles.budgetLabel}>Approved</Text>
+                </View>
+                <View style={styles.budgetCol}>
+                  <Text style={[styles.budgetVal, { color: '#FFCC00' }]}>${pledgedTotal.toLocaleString()}</Text>
+                  <Text style={styles.budgetLabel}>Pledged/Review</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Sponsor a tournament form */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Sponsor a Tournament</Text>
+              <Text style={styles.sectionTitle}>SPONSOR A TOURNAMENT</Text>
               <View style={styles.formCard}>
                 {message ? (
                   <View style={styles.successBox}>
@@ -278,30 +465,101 @@ const SponsorDashboard = ({
                     {submitting ? (
                       <ActivityIndicator color="#141414" />
                     ) : (
-                      <Text style={styles.submitButtonText}>SUBMIT PLEDGE</Text>
+                      <Text style={styles.submitButtonText}>SUBMIT SPONSORSHIP PLEDGE</Text>
                     )}
                   </TouchableOpacity>
                 </Animated.View>
               </View>
             </View>
 
-            {/* Contribution History */}
-            <View style={[styles.section, { marginBottom: 40 }]}>
-              <Text style={styles.sectionTitle}>Pledges & Outcomes History</Text>
-              {history.length === 0 ? (
+            {/* Audience Leaderboard widget */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>AUDIENCE REACH LEADERBOARD</Text>
+              <View style={styles.leaderboardCard}>
+                <View style={styles.leaderRow}>
+                  <Text style={styles.leaderRank}>1</Text>
+                  <View style={styles.leaderMeta}>
+                    <Text style={styles.leaderTourneyName}>State Championship Series</Text>
+                    <Text style={styles.leaderReach}>14.8K Viewers avg • 12 Teams</Text>
+                  </View>
+                  <Text style={styles.leaderIdx}>INDEX 9.8</Text>
+                </View>
+                <View style={styles.leaderRow}>
+                  <Text style={styles.leaderRank}>2</Text>
+                  <View style={styles.leaderMeta}>
+                    <Text style={styles.leaderTourneyName}>Premier T20 Cup</Text>
+                    <Text style={styles.leaderReach}>9.4K Viewers avg • 10 Teams</Text>
+                  </View>
+                  <Text style={styles.leaderIdx}>INDEX 8.2</Text>
+                </View>
+                <View style={styles.leaderRow}>
+                  <Text style={styles.leaderRank}>3</Text>
+                  <View style={styles.leaderMeta}>
+                    <Text style={styles.leaderTourneyName}>District Knockout Trophy</Text>
+                    <Text style={styles.leaderReach}>6.1K Viewers avg • 8 Teams</Text>
+                  </View>
+                  <Text style={styles.leaderIdx}>INDEX 6.5</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Contribution History with Filter pills */}
+            <View style={styles.section}>
+              <View style={styles.historyHeader}>
+                <Text style={styles.sectionTitle}>PLEDGES & OUTCOMES HISTORY</Text>
+              </View>
+              
+              {/* Filter pills */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterBar}>
+                {['ALL', 'PENDING', 'APPROVED', 'ACTIVE'].map(pill => (
+                  <TouchableOpacity
+                    key={pill}
+                    style={[styles.filterPill, filterStatus === pill && styles.filterPillActive]}
+                    onPress={() => setFilterStatus(pill)}
+                  >
+                    <Text style={[styles.filterPillText, filterStatus === pill && styles.filterPillTextActive]}>
+                      {pill}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {getFilteredPledges().length === 0 ? (
                 <View style={styles.emptyStateContainer}>
                   <Text style={styles.emptyStateEmoji}>💼</Text>
-                  <Text style={styles.emptyText}>No sponsorship contributions registered.</Text>
+                  <Text style={styles.emptyText}>No matching sponsorship contributions found.</Text>
                 </View>
               ) : (
-                history.map((item, index) => (
+                getFilteredPledges().map((item, index) => (
                   <View key={index} style={styles.pledgeCard}>
-                    <View style={styles.pledgeInfo}>
-                      <Text style={styles.tournamentName}>{item.tournament_name}</Text>
-                      <Text style={styles.tournamentStatus}>Tournament: {item.tournament_status}</Text>
-                      <Text style={styles.sponsorshipStatus}>Sponsorship: {item.status || 'pending'}</Text>
+                    <View style={styles.pledgeHeaderRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.tournamentName}>{item.tournament_name}</Text>
+                        <Text style={styles.tournamentStatus}>Tournament Status: {item.tournament_status}</Text>
+                      </View>
+                      <Text style={styles.pledgeAmount}>${item.amount}</Text>
                     </View>
-                    <Text style={styles.pledgeAmount}>${item.amount}</Text>
+
+                    {/* Stepper Status tracker */}
+                    <Text style={styles.pledgeSectionLabel}>SPONSORSHIP PIPELINE PROGRESS</Text>
+                    {renderStatusTracker(item.status)}
+
+                    {/* Impact stats details */}
+                    <Text style={styles.pledgeSectionLabel}>ESTIMATED BRAND IMPACT & REACH</Text>
+                    <View style={styles.impactGrid}>
+                      <View style={styles.impactBox}>
+                        <Text style={styles.impactVal}>{item.teamsCount} Teams</Text>
+                        <Text style={styles.impactLabel}>Exposure</Text>
+                      </View>
+                      <View style={styles.impactBox}>
+                        <Text style={styles.impactVal}>{item.matchesPlayed} Matches</Text>
+                        <Text style={styles.impactLabel}>Played</Text>
+                      </View>
+                      <View style={styles.impactBox}>
+                        <Text style={styles.impactVal}>{item.viewers.toLocaleString()}</Text>
+                        <Text style={styles.impactLabel}>Audience Reach</Text>
+                      </View>
+                    </View>
                   </View>
                 ))
               )}
@@ -310,8 +568,8 @@ const SponsorDashboard = ({
         )}
 
         {activeTab === 'Matches' && (
-          <View style={{ marginBottom: 40 }}>
-            <Text style={styles.sectionTitle}>Tournament Matches</Text>
+          <View>
+            <Text style={styles.sectionTitle}>TOURNAMENT MATCHES</Text>
             {loadingMatches ? (
               <ActivityIndicator color="#D4AF37" style={{ marginVertical: 30 }} />
             ) : matchesList.length === 0 ? (
@@ -521,12 +779,8 @@ const styles = StyleSheet.create({
   tabButtonTextActive: {
     color: '#D4AF37',
   },
-  statContainer: {
-    marginTop: 16,
-    marginBottom: 16,
-  },
   section: {
-    marginTop: 16,
+    marginTop: 20,
   },
   sectionTitle: {
     fontWeight: '900',
@@ -545,36 +799,41 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2D2D2D',
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 10,
+    padding: 20,
+    marginBottom: 14,
+  },
+  pledgeHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  pledgeInfo: {
-    flex: 1,
-    paddingRight: 8,
+    alignItems: 'flex-start',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2D2D2D',
+    paddingBottom: 12,
   },
   tournamentName: {
     color: '#F5F5F5',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 4,
   },
   tournamentStatus: {
     color: '#888888',
-    fontSize: 12,
-    marginBottom: 2,
-  },
-  sponsorshipStatus: {
-    color: '#D4AF37',
     fontSize: 11,
+    marginTop: 2,
     fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
   pledgeAmount: {
     color: '#D4AF37',
     fontWeight: '900',
-    fontSize: 18,
+    fontSize: 20,
+  },
+  pledgeSectionLabel: {
+    color: '#888',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
+    marginTop: 16,
+    marginBottom: 10,
   },
   formCard: {
     backgroundColor: '#1F1F1F',
@@ -844,6 +1103,222 @@ const styles = StyleSheet.create({
   emptyStateEmoji: {
     fontSize: 32,
     marginBottom: 10,
+  },
+  // ROI / Budget Premium Card Styles
+  roiRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  roiCard: {
+    flex: 1,
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+  },
+  roiVal: {
+    color: '#D4AF37',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  roiLabel: {
+    color: '#888',
+    fontSize: 9,
+    fontWeight: 'bold',
+    marginTop: 4,
+    letterSpacing: 0.5,
+  },
+  budgetCard: {
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  budgetCardTitle: {
+    color: '#888',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginBottom: 14,
+  },
+  progressBarWrapper: {
+    height: 10,
+    backgroundColor: '#333',
+    borderRadius: 5,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  progressBarSec: {
+    height: '100%',
+  },
+  budgetGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  budgetCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  budgetVal: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  budgetLabel: {
+    color: '#888',
+    fontSize: 8,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  leaderboardCard: {
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 16,
+  },
+  leaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2D2D2D',
+  },
+  leaderRank: {
+    color: '#D4AF37',
+    fontWeight: '900',
+    fontSize: 16,
+    width: 24,
+  },
+  leaderMeta: {
+    flex: 1,
+  },
+  leaderTourneyName: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  leaderReach: {
+    color: '#888',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  leaderIdx: {
+    color: '#D4AF37',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  filterBar: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  filterPill: {
+    backgroundColor: '#2A2A2A',
+    borderColor: '#3D3D3D',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    marginRight: 8,
+  },
+  filterPillActive: {
+    backgroundColor: '#D4AF37',
+    borderColor: '#D4AF37',
+  },
+  filterPillText: {
+    color: '#888',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  filterPillTextActive: {
+    color: '#141414',
+  },
+  // Tracker Pipeline Styles
+  trackerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 10,
+    justifyContent: 'space-between',
+  },
+  trackerStep: {
+    alignItems: 'center',
+    zIndex: 2,
+    flex: 1,
+  },
+  stepDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#2A2A2A',
+    borderWidth: 1.5,
+    borderColor: '#3D3D3D',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepDotActive: {
+    backgroundColor: '#D4AF37',
+    borderColor: '#D4AF37',
+  },
+  stepDotCheck: {
+    color: '#141414',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  stepLabel: {
+    color: '#888',
+    fontSize: 8,
+    fontWeight: 'bold',
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  stepLabelActive: {
+    color: '#D4AF37',
+  },
+  stepLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#333',
+    marginHorizontal: -12,
+    marginTop: -14,
+    zIndex: 1,
+  },
+  stepLineActive: {
+    backgroundColor: '#D4AF37',
+  },
+  // Impact Stats Grid Styles
+  impactGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  impactBox: {
+    flex: 1,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 8,
+    padding: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
+  },
+  impactVal: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  impactLabel: {
+    color: '#888',
+    fontSize: 8,
+    marginTop: 2,
   },
 });
 

@@ -38,7 +38,7 @@ const PlayerDashboard = ({
   const prevTabRef = useRef(activeTab);
 
   useEffect(() => {
-    const tabs = ['Overview', 'Statistics', 'Matches'];
+    const tabs = ['Overview', 'Statistics', 'Matches', 'Tournaments'];
     const prevIndex = tabs.indexOf(prevTabRef.current);
     const currIndex = tabs.indexOf(activeTab);
     prevTabRef.current = activeTab;
@@ -80,6 +80,21 @@ const PlayerDashboard = ({
   const [error, setError] = useState('');
 
   const [showTourneys, setShowTourneys] = useState(false);
+  const [showRegisterForm, setShowRegisterForm] = useState(false);
+
+  // Player availability toggle
+  const [isAvailable, setIsAvailable] = useState(true);
+  const availScale = useRef(new Animated.Value(1)).current;
+  const toggleAvailability = () => {
+    Animated.sequence([
+      Animated.timing(availScale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
+      Animated.timing(availScale, { toValue: 1, duration: 80, useNativeDriver: true }),
+    ]).start();
+    setIsAvailable(v => !v);
+  };
+
+  // Tournament Details Modal
+  const [selectedTournamentDetails, setSelectedTournamentDetails] = useState(null);
 
   // Match Details Modal
   const [selectedMatch, setSelectedMatch] = useState(null);
@@ -248,12 +263,32 @@ const PlayerDashboard = ({
     return coach ? coach.full_name : 'No coach assigned';
   };
 
+  // Countdown timer for tournament registration deadlines
+  const getCountdown = (dateStr) => {
+    if (!dateStr) return null;
+    const diff = new Date(dateStr) - new Date();
+    if (diff <= 0) return 'Closed';
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    if (days > 0) return `${days}d ${hours}h left`;
+    return `${hours}h left`;
+  };
+
+  // Win probability based on runs scored
+  const getWinProbability = (match) => {
+    const runsA = match.team_a_runs ?? 0;
+    const runsB = match.team_b_runs ?? 0;
+    const total = runsA + runsB;
+    if (total === 0) return 50;
+    return Math.round((runsA / total) * 100);
+  };
+
   return (
     <View style={styles.container}>
       {/* Sub-header Tabs */}
       {!parentActiveTab && (
         <View style={styles.tabBar}>
-          {['Overview', 'Statistics', 'Matches'].map((tab) => (
+          {['Overview', 'Statistics', 'Matches', 'Tournaments'].map((tab) => (
             <TouchableOpacity
               key={tab}
               activeOpacity={0.8}
@@ -272,6 +307,35 @@ const PlayerDashboard = ({
         <ScrollView nestedScrollEnabled={true} style={styles.scrollContainer}>
           {activeTab === 'Overview' && (
           <View>
+            {/* Player Profile Card */}
+            <View style={[styles.formCard, { marginBottom: 4, marginTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: '#2A2A2A', borderWidth: 2, borderColor: '#D4AF37', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                  <Text style={{ fontSize: 26 }}>🏏</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#F5F5F5', fontWeight: 'bold', fontSize: 16 }}>{data.full_name || data.email?.split('@')[0] || 'Player'}</Text>
+                  <Text style={{ color: '#888', fontSize: 12, marginTop: 2 }}>Cricket Player</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                    <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: isAvailable ? '#81C784' : '#E57373', marginRight: 6 }} />
+                    <Text style={{ color: isAvailable ? '#81C784' : '#E57373', fontSize: 11, fontWeight: '600' }}>
+                      {isAvailable ? 'Available' : 'Unavailable'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <Animated.View style={{ transform: [{ scale: availScale }] }}>
+                <TouchableOpacity
+                  onPress={toggleAvailability}
+                  style={[{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: isAvailable ? '#81C784' : '#E57373', backgroundColor: isAvailable ? 'rgba(129,199,132,0.08)' : 'rgba(229,115,115,0.08)' }]}
+                >
+                  <Text style={{ color: isAvailable ? '#81C784' : '#E57373', fontSize: 11, fontWeight: 'bold' }}>
+                    {isAvailable ? 'Set Busy' : 'Set Free'}
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
+            </View>
+
             {/* Stats row */}
             <View style={styles.statsRow}>
               <View style={styles.statCol}>
@@ -285,10 +349,75 @@ const PlayerDashboard = ({
               </View>
             </View>
 
-            {/* Register Team Form */}
+            {/* Next Match Static Card */}
+            <View style={[styles.section, { marginTop: 10 }]}>
+              <Text style={styles.sectionTitle}>Up Next</Text>
+              <View style={[styles.formCard, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#F5F5F5', fontSize: 16, fontWeight: 'bold' }}>Mumbai Indians vs CSK</Text>
+                  <Text style={{ color: '#888', fontSize: 12, marginVertical: 4 }}>IPL 2026 - Group Stage</Text>
+                  <Text style={{ color: '#D4AF37', fontSize: 12, fontWeight: '600' }}>Tomorrow, 19:30 PM</Text>
+                </View>
+                <View style={{ borderWidth: 1, borderColor: '#D4AF37', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 10, backgroundColor: 'rgba(212, 175, 55, 0.05)' }}>
+                  <Text style={{ color: '#D4AF37', fontSize: 10, fontWeight: 'bold' }}>UPCOMING</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Recent Form */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Register Team & Squad</Text>
-              <View style={styles.formCard}>
+              <Text style={styles.sectionTitle}>Recent Form</Text>
+              <View style={[styles.formCard, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingVertical: 20 }]}>
+                {['W', 'W', 'L', 'W', 'D'].map((res, i) => (
+                  <View key={i} style={{
+                    width: 40, height: 40, borderRadius: 20, 
+                    backgroundColor: res === 'W' ? '#1E2C1E' : res === 'L' ? '#3C1F1F' : '#2A2A2A',
+                    borderWidth: 1, 
+                    borderColor: res === 'W' ? '#2E7D32' : res === 'L' ? '#C62828' : '#888',
+                    alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <Text style={{ 
+                      color: res === 'W' ? '#81C784' : res === 'L' ? '#E57373' : '#888', 
+                      fontWeight: 'bold', fontSize: 16 
+                    }}>{res}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            {/* Quick Actions / Highlights */}
+            <View style={[styles.section, { marginBottom: 30 }]}>
+              <Text style={styles.sectionTitle}>Player Highlights</Text>
+              <View style={styles.teamCard}>
+                <Text style={styles.teamIcon}>🌟</Text>
+                <Text style={styles.teamName}>Man of the Match - Last Game</Text>
+              </View>
+              <View style={styles.teamCard}>
+                <Text style={styles.teamIcon}>🎯</Text>
+                <Text style={styles.teamName}>Top Run Scorer - IPL 2026</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {activeTab === 'Tournaments' && (
+          <View>
+            {/* Upcoming Tournaments & Registration */}
+            <View style={[styles.section, { marginBottom: 30 }]}>
+              <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12}}>
+                <Text style={[styles.sectionTitle, {marginBottom: 0}]}>Upcoming Tournaments</Text>
+                {!showRegisterForm && (
+                  <TouchableOpacity 
+                    style={[styles.submitButton, {marginTop: 0, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#2A2A2A', borderWidth: 1, borderColor: '#D4AF37'}]} 
+                    onPress={() => setShowRegisterForm(true)}
+                  >
+                    <Text style={[styles.submitButtonText, {fontSize: 11, color: '#D4AF37'}]}>+ Register Team</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {showRegisterForm && (
+              <View style={[styles.formCard, {marginBottom: 20}]}>
                 {message ? (
                   <View style={styles.successBox}>
                     <Text style={styles.successText}>✓ {message}</Text>
@@ -454,11 +583,48 @@ const PlayerDashboard = ({
                     )}
                   </TouchableOpacity>
                 </Animated.View>
+                <TouchableOpacity style={[styles.submitButton, {marginTop: 10, backgroundColor: '#333333'}]} onPress={() => setShowRegisterForm(false)}>
+                   <Text style={[styles.submitButtonText, {color: '#888888'}]}>Cancel</Text>
+                </TouchableOpacity>
               </View>
-            </View>
+              )}
 
+              {/* Tournament List */}
+              {tournaments.length === 0 ? (
+                <View style={styles.emptyStateContainer}>
+                  <Text style={styles.emptyStateEmoji}>🏆</Text>
+                  <Text style={styles.emptyText}>No upcoming tournaments.</Text>
+                </View>
+              ) : (
+                tournaments.filter(t => t.is_approved).map((t) => {
+                  const countdown = getCountdown(t.registration_end_date);
+                  return (
+                  <TouchableOpacity key={t.id} style={[styles.teamCard, { flexDirection: 'column', alignItems: 'flex-start', gap: 6 }]} onPress={() => setSelectedTournamentDetails(t)}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                        <Text style={styles.teamIcon}>🏆</Text>
+                        <Text style={[styles.teamName, { flex: 1 }]}>{t.name}</Text>
+                      </View>
+                      {countdown && (
+                        <View style={{ backgroundColor: countdown === 'Closed' ? '#3C1F1F' : 'rgba(212,175,55,0.1)', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8, borderWidth: 1, borderColor: countdown === 'Closed' ? '#C62828' : '#D4AF37' }}>
+                          <Text style={{ color: countdown === 'Closed' ? '#E57373' : '#D4AF37', fontSize: 10, fontWeight: 'bold' }}>⏱ {countdown}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {t.city && <Text style={{ color: '#888', fontSize: 11, paddingLeft: 32 }}>📍 {t.city}{t.ground_name ? ` · ${t.ground_name}` : ''}</Text>}
+                    {t.fee > 0 && <Text style={{ color: '#D4AF37', fontSize: 11, paddingLeft: 32 }}>Entry: ${t.fee}</Text>}
+                  </TouchableOpacity>
+                  );
+                })
+              )}
+            </View>
+          </View>
+        )}
+
+        {activeTab === 'Teams' && (
+          <View>
             {/* My Registered Squads */}
-            <View style={[styles.section, { marginBottom: 30 }]}>
+            <View style={[styles.section, { marginBottom: 30, marginTop: 16 }]}>
               <Text style={styles.sectionTitle}>My Squads</Text>
               {teams.length === 0 ? (
                 <View style={styles.emptyStateContainer}>
@@ -513,7 +679,14 @@ const PlayerDashboard = ({
 
         {activeTab === 'Matches' && (
           <Animated.View style={{ opacity: listFade }}>
-            <Text style={styles.sectionTitle}>Tournament Matches</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={styles.sectionTitle}>Tournament Matches</Text>
+              {matchesList.filter(m => m.status === 'live').length > 0 && (
+                <View style={{ backgroundColor: '#FF3B30', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 12 }}>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>🔴 {matchesList.filter(m => m.status === 'live').length} LIVE</Text>
+                </View>
+              )}
+            </View>
             {loadingMatches ? (
               <ActivityIndicator color="#D4AF37" style={{ marginVertical: 30 }} />
             ) : matchesList.length === 0 ? (
@@ -522,7 +695,12 @@ const PlayerDashboard = ({
                 <Text style={styles.emptyText}>No tournament matches scheduled yet.</Text>
               </View>
             ) : (
-              matchesList.map((match) => (
+              matchesList.map((match) => {
+                const probA = getWinProbability(match);
+                const probB = 100 - probA;
+                const isLive = match.status === 'live';
+                const hasScores = (match.team_a_runs ?? 0) + (match.team_b_runs ?? 0) > 0;
+                return (
                 <TouchableOpacity
                   key={match.id}
                   style={styles.matchCard}
@@ -538,15 +716,29 @@ const PlayerDashboard = ({
                     </Text>
                     <Text style={styles.matchTourneyName}>{match.tournamentName}</Text>
                     <Text style={styles.matchSummaryText}>
-                      {match.score_summary || 'Live Scoreboard Pending'}
+                      {match.score_summary || 'Scoreboard Pending'}
                     </Text>
+
+                    {/* Win Probability Bar */}
+                    {hasScores && (
+                      <View style={{ marginTop: 10 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <Text style={{ color: '#81C784', fontSize: 10, fontWeight: 'bold' }}>{match.team_a_name?.split(' ')[0]} {probA}%</Text>
+                          <Text style={{ color: '#E57373', fontSize: 10, fontWeight: 'bold' }}>{probB}% {match.team_b_name?.split(' ')[0]}</Text>
+                        </View>
+                        <View style={{ height: 5, borderRadius: 4, backgroundColor: '#2A2A2A', overflow: 'hidden', flexDirection: 'row' }}>
+                          <View style={{ width: `${probA}%`, backgroundColor: '#81C784', borderRadius: 4 }} />
+                          <View style={{ width: `${probB}%`, backgroundColor: '#E57373', borderRadius: 4 }} />
+                        </View>
+                      </View>
+                    )}
                   </View>
 
                   {/* Oscillating Live Status Badge */}
                   <Animated.View
                     style={[
                       styles.matchStatusBadge,
-                      match.status === 'live' && {
+                      isLive && {
                         borderColor: '#FF3B30',
                         transform: [{ scale: badgePulse }]
                       }
@@ -555,14 +747,15 @@ const PlayerDashboard = ({
                     <Text
                       style={[
                         styles.matchStatusText,
-                        match.status === 'live' && { color: '#FF3B30', fontWeight: '900' }
+                        isLive && { color: '#FF3B30', fontWeight: '900' }
                       ]}
                     >
                       {match.status?.toUpperCase()}
                     </Text>
                   </Animated.View>
                 </TouchableOpacity>
-              ))
+                );
+              })
             )}
           </Animated.View>
         )}
@@ -577,8 +770,20 @@ const PlayerDashboard = ({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            {/* Drag Handle */}
+            <View style={styles.modalDragHandle} />
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Match Analytics</Text>
+              <View style={styles.modalHeaderLeft}>
+                <View style={styles.modalIconBadge}>
+                  <Text style={{ fontSize: 18 }}>📊</Text>
+                </View>
+                <View>
+                  <Text style={styles.modalTitle}>Match Analytics</Text>
+                  {selectedMatch && (
+                    <Text style={styles.modalSubtitle}>{selectedMatch.team_a_name} vs {selectedMatch.team_b_name}</Text>
+                  )}
+                </View>
+              </View>
               <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setSelectedMatch(null)}>
                 <Text style={styles.modalCloseBtnText}>✕</Text>
               </TouchableOpacity>
@@ -586,9 +791,6 @@ const PlayerDashboard = ({
 
             {selectedMatch && (
               <View style={{ flex: 1 }}>
-                <Text style={styles.modalTeamsSubTitle}>
-                  {selectedMatch.team_a_name} vs {selectedMatch.team_b_name}
-                </Text>
 
                 {/* Modal Sub-Tabs */}
                 <View style={styles.modalTabBar}>
@@ -711,6 +913,112 @@ const PlayerDashboard = ({
                   )}
                 </ScrollView>
               </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Tournament Details Modal */}
+      <Modal
+        visible={selectedTournamentDetails !== null}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSelectedTournamentDetails(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Drag Handle */}
+            <View style={styles.modalDragHandle} />
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderLeft}>
+                <View style={styles.modalIconBadge}>
+                  <Text style={{ fontSize: 18 }}>🏆</Text>
+                </View>
+                <View>
+                  <Text style={styles.modalTitle}>Tournament Details</Text>
+                  {selectedTournamentDetails && (
+                    <Text style={styles.modalSubtitle}>{selectedTournamentDetails.status?.replace('_', ' ') || 'Approved'}</Text>
+                  )}
+                </View>
+              </View>
+              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setSelectedTournamentDetails(null)}>
+                <Text style={styles.modalCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {selectedTournamentDetails && (
+              <ScrollView style={{ flex: 1, marginTop: 12 }}>
+                <View style={styles.summaryContainer}>
+                  <View style={styles.summaryStatItem}>
+                    <Text style={styles.summaryLabel}>Name</Text>
+                    <Text style={styles.summaryVal}>{selectedTournamentDetails.name}</Text>
+                  </View>
+                  
+                  {/* Additional Tournament Details */}
+                  <View style={styles.summaryStatItem}>
+                    <Text style={styles.summaryLabel}>Registration Fee</Text>
+                    <Text style={[styles.summaryVal, { color: '#D4AF37', fontWeight: 'bold' }]}>
+                      {selectedTournamentDetails.fee && selectedTournamentDetails.fee > 0 ? `$${selectedTournamentDetails.fee}` : 'Free'}
+                    </Text>
+                  </View>
+
+                  {(selectedTournamentDetails.city || selectedTournamentDetails.location) && (
+                  <View style={styles.summaryStatItem}>
+                    <Text style={styles.summaryLabel}>City / Location</Text>
+                    <Text style={styles.summaryVal}>{selectedTournamentDetails.city || selectedTournamentDetails.location}</Text>
+                  </View>
+                  )}
+
+                  {selectedTournamentDetails.ground_name && (
+                  <View style={styles.summaryStatItem}>
+                    <Text style={styles.summaryLabel}>Ground Name</Text>
+                    <Text style={styles.summaryVal}>{selectedTournamentDetails.ground_name}</Text>
+                  </View>
+                  )}
+
+                  {selectedTournamentDetails.prize_pools && (
+                  <View style={styles.summaryStatItem}>
+                    <Text style={styles.summaryLabel}>Prize Pool</Text>
+                    <Text style={styles.summaryVal}>{selectedTournamentDetails.prize_pools}</Text>
+                  </View>
+                  )}
+
+                  {selectedTournamentDetails.start_date && (
+                  <View style={styles.summaryStatItem}>
+                    <Text style={styles.summaryLabel}>Tournament Dates</Text>
+                    <Text style={styles.summaryVal}>
+                      {new Date(selectedTournamentDetails.start_date).toLocaleDateString()} 
+                      {selectedTournamentDetails.end_date ? ` to ${new Date(selectedTournamentDetails.end_date).toLocaleDateString()}` : ''}
+                    </Text>
+                  </View>
+                  )}
+
+                  {selectedTournamentDetails.registration_end_date && (
+                  <View style={styles.summaryStatItem}>
+                    <Text style={styles.summaryLabel}>Registration Deadline</Text>
+                    <Text style={styles.summaryVal}>{new Date(selectedTournamentDetails.registration_end_date).toLocaleDateString()}</Text>
+                  </View>
+                  )}
+
+                  <View style={styles.summaryStatItem}>
+                    <Text style={styles.summaryLabel}>Match Format</Text>
+                    <Text style={styles.summaryVal}>
+                      {selectedTournamentDetails.overs || 20} Overs ({selectedTournamentDetails.ball_type || 'Any ball'})
+                    </Text>
+                  </View>
+
+                  <View style={styles.summaryStatItem}>
+                    <Text style={styles.summaryLabel}>Team Limits</Text>
+                    <Text style={styles.summaryVal}>
+                      Max {selectedTournamentDetails.number_of_entry || 8} teams, {selectedTournamentDetails.team_limits || 15} players per squad
+                    </Text>
+                  </View>
+
+                  <View style={styles.summaryStatItem}>
+                    <Text style={styles.summaryLabel}>Status</Text>
+                    <Text style={styles.summaryVal}>{selectedTournamentDetails.status || (selectedTournamentDetails.is_approved ? 'Approved' : 'Pending')}</Text>
+                  </View>
+                </View>
+              </ScrollView>
             )}
           </View>
         </View>
@@ -1036,17 +1344,29 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#1F1F1F',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: '#1A1A1A',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     borderTopWidth: 1,
-    borderTopColor: '#2D2D2D',
-    maxHeight: '85%',
-    padding: 24,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: '#2D2D2D',
+    maxHeight: '88%',
+    paddingTop: 12,
+    paddingHorizontal: 24,
+    paddingBottom: 32,
+  },
+  modalDragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#3D3D3D',
+    alignSelf: 'center',
+    marginBottom: 20,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1055,49 +1375,86 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#2D2D2D',
+    marginBottom: 4,
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  modalIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(212, 175, 55, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
     color: '#F5F5F5',
+    letterSpacing: 0.3,
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 1,
   },
   modalCloseBtn: {
-    padding: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#2A2A2A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
   },
   modalCloseBtnText: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#F5F5F5',
+    color: '#888',
+    lineHeight: 16,
   },
   modalTeamsSubTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#D4AF37',
     marginVertical: 14,
+    textAlign: 'center',
   },
   modalTabBar: {
     flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: '#3D3D3D',
-    borderRadius: 8,
-    overflow: 'hidden',
+    backgroundColor: '#252525',
+    borderRadius: 12,
+    padding: 4,
+    marginVertical: 12,
+    gap: 4,
   },
   modalTabButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 9,
     alignItems: 'center',
-    backgroundColor: '#1F1F1F',
+    borderRadius: 9,
   },
   modalTabButtonActive: {
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#D4AF37',
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   modalTabButtonText: {
-    color: '#888888',
+    color: '#666',
     fontSize: 12,
     fontWeight: 'bold',
   },
   modalTabButtonTextActive: {
-    color: '#D4AF37',
+    color: '#141414',
   },
   summaryContainer: {
     padding: 6,

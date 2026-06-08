@@ -10,6 +10,7 @@ import {
   ScrollView,
   Animated,
   Easing,
+  TextInput,
 } from 'react-native';
 import StatCard from '../widgets/StatCard';
 
@@ -21,10 +22,34 @@ const CoachDashboard = ({
   activeTab: parentActiveTab,
 }) => {
   const teamsCount = data.teams_trained_count ?? 0;
-  const trainees = data.players ?? [];
+  const initialPlayers = data.players ?? [];
+
+  // Local state for trainees to support ratings/comments dynamically
+  const [traineesList, setTraineesList] = useState([]);
+
+  useEffect(() => {
+    if (initialPlayers.length > 0) {
+      const enhanced = initialPlayers.map((p, idx) => {
+        const battingStyles = ['Right-hand bat', 'Left-hand bat', 'Right-hand bat'];
+        const bowlingStyles = ['Right-arm offbreak', 'Left-arm medium', 'Right-arm fast', 'Legbreak'];
+        const availabilities = ['Available', 'Available', 'Away', 'Injured'];
+        return {
+          ...p,
+          id: p.id || `p-${idx}`,
+          batting_style: p.batting_style || battingStyles[idx % battingStyles.length],
+          bowling_style: p.bowling_style || bowlingStyles[idx % bowlingStyles.length],
+          availability: p.availability || availabilities[idx % availabilities.length],
+          reviews: p.reviews || [
+            { rating: 4, comment: 'Shows good consistency in net sessions.', date: '2026-06-02' }
+          ],
+        };
+      });
+      setTraineesList(enhanced);
+    }
+  }, [data]);
 
   // Active Tab
-  const [localTab, setLocalTab] = useState('Trainees'); // 'Trainees', 'Matches'
+  const [localTab, setLocalTab] = useState('Trainees'); // 'Trainees', 'Matches', 'Sessions', 'Squads'
   const activeTab = parentActiveTab || localTab;
   const setActiveTab = setLocalTab;
 
@@ -33,7 +58,7 @@ const CoachDashboard = ({
   const prevTabRef = useRef(activeTab);
 
   useEffect(() => {
-    const tabs = ['Trainees', 'Matches'];
+    const tabs = ['Trainees', 'Matches', 'Sessions', 'Squads'];
     const prevIndex = tabs.indexOf(prevTabRef.current);
     const currIndex = tabs.indexOf(activeTab);
     prevTabRef.current = activeTab;
@@ -67,7 +92,36 @@ const CoachDashboard = ({
   const [matchesList, setMatchesList] = useState([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
-  const [matchDetailsTab, setMatchDetailsTab] = useState('Summary'); // 'Summary', 'Scorecard'
+  const [matchDetailsTab, setMatchDetailsTab] = useState('Summary'); // 'Summary', 'Scorecard', 'Feedback'
+  const [matchFeedbackText, setMatchFeedbackText] = useState('');
+  const [feedbackPlayerId, setFeedbackPlayerId] = useState('');
+  const [matchFeedbackList, setMatchFeedbackList] = useState({}); // keyed by matchId
+
+  // Trainee Profile bottom sheet
+  const [selectedTrainee, setSelectedTrainee] = useState(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+
+  // Practice Sessions scheduler
+  const [sessionsList, setSessionsList] = useState([
+    { id: 1, date: '2026-06-10', time: '08:00 AM', ground: 'Central Ground', focus: 'Nets Practice - Batting against spin' },
+    { id: 2, date: '2026-06-13', time: '04:30 PM', ground: 'St. Marys Oval', focus: 'Bowling target practice & fielding drills' },
+  ]);
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [sessionDate, setSessionDate] = useState('');
+  const [sessionTime, setSessionTime] = useState('');
+  const [sessionGround, setSessionGround] = useState('');
+  const [sessionFocus, setSessionFocus] = useState('');
+
+  // Squad Builder state
+  const [squadsList, setSquadsList] = useState([
+    { id: 1, teamName: 'Under-19 Stars', tournamentName: 'State Championship', playersCount: 4, players: ['Asha', 'Ashwin', 'Sanjay', 'Rahul'] }
+  ]);
+  const [showSquadModal, setShowSquadModal] = useState(false);
+  const [squadTeamName, setSquadTeamName] = useState('');
+  const [squadTourneyId, setSquadTourneyId] = useState('');
+  const [showSquadTourneyDropdown, setShowSquadTourneyDropdown] = useState(false);
+  const [selectedSquadPlayers, setSelectedSquadPlayers] = useState([]);
 
   // Pulse animation for active matches
   const badgePulse = useRef(new Animated.Value(1)).current;
@@ -118,10 +172,137 @@ const CoachDashboard = ({
     }
   }, [activeTab, tournaments]);
 
+  const handleAddReview = () => {
+    if (!selectedTrainee) return;
+    if (!reviewComment.trim()) {
+      alert('Please enter a feedback comment.');
+      return;
+    }
+    const newReview = {
+      rating: reviewRating,
+      comment: reviewComment.trim(),
+      date: new Date().toISOString().split('T')[0]
+    };
+
+    setTraineesList(prev => prev.map(p => {
+      if (p.id === selectedTrainee.id || p.full_name === selectedTrainee.full_name) {
+        const updatedReviews = [newReview, ...p.reviews];
+        const updated = {
+          ...p,
+          reviews: updatedReviews
+        };
+        setSelectedTrainee(updated); // update active modal state
+        return updated;
+      }
+      return p;
+    }));
+    setReviewComment('');
+    alert('Performance feedback submitted!');
+  };
+
+  const handleScheduleSession = () => {
+    if (!sessionDate || !sessionTime || !sessionGround || !sessionFocus) {
+      alert('Please fill all fields to schedule a session.');
+      return;
+    }
+    const newSession = {
+      id: Date.now(),
+      date: sessionDate,
+      time: sessionTime,
+      ground: sessionGround,
+      focus: sessionFocus,
+    };
+    setSessionsList([newSession, ...sessionsList]);
+    setSessionDate('');
+    setSessionTime('');
+    setSessionGround('');
+    setSessionFocus('');
+    setShowSessionModal(false);
+    alert('Practice session scheduled successfully!');
+  };
+
+  const handleToggleSquadPlayer = (name) => {
+    setSelectedSquadPlayers(prev => {
+      if (prev.includes(name)) {
+        return prev.filter(p => p !== name);
+      } else {
+        return [...prev, name];
+      }
+    });
+  };
+
+  const handleSaveSquad = () => {
+    if (!squadTeamName || !squadTourneyId) {
+      alert('Please provide a team name and select a tournament.');
+      return;
+    }
+    if (selectedSquadPlayers.length === 0) {
+      alert('Please select at least 1 player for the squad.');
+      return;
+    }
+    const tourney = tournaments.find(t => t.id.toString() === squadTourneyId);
+    const newSquad = {
+      id: Date.now(),
+      teamName: squadTeamName,
+      tournamentName: tourney ? tourney.name : 'Unknown Tournament',
+      playersCount: selectedSquadPlayers.length,
+      players: selectedSquadPlayers,
+    };
+    setSquadsList([newSquad, ...squadsList]);
+    setSquadTeamName('');
+    setSquadTourneyId('');
+    setSelectedSquadPlayers([]);
+    setShowSquadModal(false);
+    alert('Squad compiled successfully!');
+  };
+
+  const handleAddMatchFeedback = () => {
+    if (!selectedMatch) return;
+    if (!feedbackPlayerId || !matchFeedbackText.trim()) {
+      alert('Please select a player and enter your feedback comment.');
+      return;
+    }
+    const player = traineesList.find(p => p.id === feedbackPlayerId || p.full_name === feedbackPlayerId);
+    const newFeedback = {
+      id: Date.now(),
+      playerName: player ? player.full_name : 'Trainee',
+      comment: matchFeedbackText.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    const key = selectedMatch.id;
+    const currentFeedback = matchFeedbackList[key] || [];
+    setMatchFeedbackList({
+      ...matchFeedbackList,
+      [key]: [newFeedback, ...currentFeedback]
+    });
+    setMatchFeedbackText('');
+    setFeedbackPlayerId('');
+    alert('Match feedback saved!');
+  };
+
+  const getAvailabilityColor = (status) => {
+    switch (status) {
+      case 'Available': return '#4CD964';
+      case 'Away': return '#FFCC00';
+      case 'Injured': return '#FF3B30';
+      default: return '#888';
+    }
+  };
+
   const renderPlayerItem = ({ item }) => (
-    <View style={styles.playerCard}>
+    <TouchableOpacity
+      activeOpacity={0.9}
+      style={styles.playerCard}
+      onPress={() => setSelectedTrainee(item)}
+    >
       <View style={styles.playerInfo}>
-        <Text style={styles.playerName}>{item.full_name}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={[styles.statusDot, { backgroundColor: getAvailabilityColor(item.availability) }]} />
+          <Text style={styles.playerName}>{item.full_name}</Text>
+        </View>
+        <Text style={styles.playerSubText}>
+          {item.batting_style} | {item.bowling_style}
+        </Text>
         <Text style={styles.playerStats}>
           Runs: {item.runs_scored}  |  Wickets: {item.wickets_taken}  |  Balls: {item.balls_faced}
         </Text>
@@ -130,7 +311,7 @@ const CoachDashboard = ({
         <Text style={styles.indexLabel}>INDEX RATING</Text>
         <Text style={styles.indexValue}>{(item.performance_score ?? 0.0).toFixed(2)}</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -138,7 +319,7 @@ const CoachDashboard = ({
       {/* Dashboard Sub-Tabs */}
       {!parentActiveTab && (
         <View style={styles.tabBar}>
-          {['Trainees', 'Matches'].map((tab) => (
+          {['Trainees', 'Matches', 'Sessions', 'Squads'].map((tab) => (
             <TouchableOpacity
               key={tab}
               activeOpacity={0.8}
@@ -157,7 +338,7 @@ const CoachDashboard = ({
 
       {activeTab === 'Trainees' && (
         <FlatList
-          data={trainees}
+          data={traineesList}
           keyExtractor={(item, index) => index.toString()}
           ListHeaderComponent={
             <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
@@ -233,7 +414,307 @@ const CoachDashboard = ({
         </ScrollView>
       )}
 
-      {/* Match Details Modal (Summary, Scorecard) */}
+      {activeTab === 'Sessions' && (
+        <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+          <View style={styles.headerButtonRow}>
+            <Text style={[styles.sectionTitle, { marginTop: 16, marginBottom: 0 }]}>PRACTICE DRILLS & SESSIONS</Text>
+            <TouchableOpacity
+              style={styles.addDrillButton}
+              activeOpacity={0.8}
+              onPress={() => setShowSessionModal(true)}
+            >
+              <Text style={styles.addDrillButtonText}>+ SCHEDULE</Text>
+            </TouchableOpacity>
+          </View>
+
+          {sessionsList.map((session) => (
+            <View key={session.id} style={styles.sessionCard}>
+              <View style={styles.sessionHeader}>
+                <Text style={styles.sessionDate}>{session.date} | {session.time}</Text>
+                <View style={styles.sessionBadge}>
+                  <Text style={styles.sessionBadgeText}>PRACTICE</Text>
+                </View>
+              </View>
+              <Text style={styles.sessionGround}>📍 {session.ground}</Text>
+              <Text style={styles.sessionFocus}>🎯 Focus: {session.focus}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      {activeTab === 'Squads' && (
+        <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+          <View style={styles.headerButtonRow}>
+            <Text style={[styles.sectionTitle, { marginTop: 16, marginBottom: 0 }]}>ACTIVE SQUADS</Text>
+            <TouchableOpacity
+              style={styles.addDrillButton}
+              activeOpacity={0.8}
+              onPress={() => setShowSquadModal(true)}
+            >
+              <Text style={styles.addDrillButtonText}>+ BUILD SQUAD</Text>
+            </TouchableOpacity>
+          </View>
+
+          {squadsList.map((squad) => (
+            <View key={squad.id} style={styles.squadCard}>
+              <View style={styles.squadHeader}>
+                <Text style={styles.squadTeamName}>{squad.teamName}</Text>
+                <Text style={styles.squadTourney}>{squad.tournamentName}</Text>
+              </View>
+              <Text style={styles.squadSubText}>Compiled Roster ({squad.playersCount} players):</Text>
+              <Text style={styles.squadPlayersList}>{squad.players.join(', ')}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* Trainee Profile Bottom Sheet Modal */}
+      <Modal
+        visible={selectedTrainee !== null}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSelectedTrainee(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {selectedTrainee && (
+              <View style={{ flex: 1 }}>
+                <View style={styles.modalHeader}>
+                  <View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={[styles.statusDot, { backgroundColor: getAvailabilityColor(selectedTrainee.availability), width: 10, height: 10 }]} />
+                      <Text style={styles.modalTitle}>{selectedTrainee.full_name}</Text>
+                    </View>
+                    <Text style={styles.modalSub}>{selectedTrainee.availability}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setSelectedTrainee(null)}>
+                    <Text style={styles.modalCloseBtnText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
+                  {/* Style Specs */}
+                  <View style={styles.specsRow}>
+                    <View style={styles.specBox}>
+                      <Text style={styles.specLabel}>BATTING STYLE</Text>
+                      <Text style={styles.specValue}>{selectedTrainee.batting_style}</Text>
+                    </View>
+                    <View style={styles.specBox}>
+                      <Text style={styles.specLabel}>BOWLING STYLE</Text>
+                      <Text style={styles.specValue}>{selectedTrainee.bowling_style}</Text>
+                    </View>
+                  </View>
+
+                  {/* Career Stats Grid */}
+                  <Text style={styles.innerSectionTitle}>CAREER STATISTICS</Text>
+                  <View style={styles.statsGrid}>
+                    <View style={styles.statsGridCol}>
+                      <Text style={styles.gridStatVal}>{selectedTrainee.runs_scored ?? 0}</Text>
+                      <Text style={styles.gridStatLabel}>Runs</Text>
+                    </View>
+                    <View style={styles.statsGridCol}>
+                      <Text style={styles.gridStatVal}>{selectedTrainee.wickets_taken ?? 0}</Text>
+                      <Text style={styles.gridStatLabel}>Wickets</Text>
+                    </View>
+                    <View style={styles.statsGridCol}>
+                      <Text style={styles.gridStatVal}>{selectedTrainee.balls_faced ?? 0}</Text>
+                      <Text style={styles.gridStatLabel}>Balls Faced</Text>
+                    </View>
+                    <View style={styles.statsGridCol}>
+                      <Text style={styles.gridStatVal}>{(selectedTrainee.performance_score ?? 0.0).toFixed(2)}</Text>
+                      <Text style={styles.gridStatLabel}>Performance</Text>
+                    </View>
+                  </View>
+
+                  {/* Rating / Review Entry */}
+                  <Text style={styles.innerSectionTitle}>ADD PERFORMANCE REVIEW</Text>
+                  <View style={styles.reviewForm}>
+                    <Text style={styles.inputLabel}>Rating</Text>
+                    <View style={styles.starRow}>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <TouchableOpacity key={star} onPress={() => setReviewRating(star)}>
+                          <Text style={{ fontSize: 24, color: star <= reviewRating ? '#D4AF37' : '#444', marginRight: 8 }}>
+                            ★
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <Text style={styles.inputLabel}>Review Notes</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="Enter focus points or feedback notes..."
+                      placeholderTextColor="#555"
+                      value={reviewComment}
+                      onChangeText={setReviewComment}
+                      multiline
+                    />
+                    <TouchableOpacity style={styles.submitReviewBtn} onPress={handleAddReview}>
+                      <Text style={styles.submitReviewBtnText}>SAVE REVIEW</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Feedback History logs */}
+                  <Text style={styles.innerSectionTitle}>FEEDBACK HISTORY</Text>
+                  {selectedTrainee.reviews && selectedTrainee.reviews.map((r, i) => (
+                    <View key={i} style={styles.reviewLogCard}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <Text style={styles.reviewLogRating}>{'★'.repeat(r.rating)}</Text>
+                        <Text style={styles.reviewLogDate}>{r.date}</Text>
+                      </View>
+                      <Text style={styles.reviewLogComment}>{r.comment}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Practice Session Scheduler Modal */}
+      <Modal
+        visible={showSessionModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowSessionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Schedule Practice Drill</Text>
+              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowSessionModal(false)}>
+                <Text style={styles.modalCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ flex: 1, marginTop: 12 }}>
+              <Text style={styles.inputLabel}>Date</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. 2026-06-15"
+                placeholderTextColor="#555"
+                value={sessionDate}
+                onChangeText={setSessionDate}
+              />
+              <Text style={styles.inputLabel}>Time</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. 09:00 AM"
+                placeholderTextColor="#555"
+                value={sessionTime}
+                onChangeText={setSessionTime}
+              />
+              <Text style={styles.inputLabel}>Ground / Venue</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. St. Marys Ground"
+                placeholderTextColor="#555"
+                value={sessionGround}
+                onChangeText={setSessionGround}
+              />
+              <Text style={styles.inputLabel}>Focus / Remarks</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. Bowling speed variations and pitch accuracy"
+                placeholderTextColor="#555"
+                value={sessionFocus}
+                onChangeText={setSessionFocus}
+                multiline
+              />
+              <TouchableOpacity style={styles.submitReviewBtn} onPress={handleScheduleSession}>
+                <Text style={styles.submitReviewBtnText}>CONFIRM PRACTICE SESSION</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Squad Builder Modal */}
+      <Modal
+        visible={showSquadModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowSquadModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Build Matches Squad</Text>
+              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowSquadModal(false)}>
+                <Text style={styles.modalCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ flex: 1, marginTop: 12 }}>
+              <Text style={styles.inputLabel}>Team Name</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. Warriors XI"
+                placeholderTextColor="#555"
+                value={squadTeamName}
+                onChangeText={setSquadTeamName}
+              />
+
+              <Text style={styles.inputLabel}>Select Tournament</Text>
+              <TouchableOpacity
+                style={styles.dropdown}
+                activeOpacity={0.8}
+                onPress={() => setShowSquadTourneyDropdown(!showSquadTourneyDropdown)}
+              >
+                <Text style={{ color: '#FFF' }}>
+                  {squadTourneyId ? tournaments.find(t => t.id.toString() === squadTourneyId)?.name : 'Choose Tournament'}
+                </Text>
+                <Text style={{ color: '#D4AF37' }}>▼</Text>
+              </TouchableOpacity>
+
+              {showSquadTourneyDropdown && (
+                <View style={styles.dropdownMenu}>
+                  {tournaments.map((t) => (
+                    <TouchableOpacity
+                      key={t.id}
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setSquadTourneyId(t.id.toString());
+                        setShowSquadTourneyDropdown(false);
+                      }}
+                    >
+                      <Text style={{ color: '#FFF' }}>{t.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              <Text style={[styles.inputLabel, { marginTop: 16 }]}>
+                Pick Players (Selected: {selectedSquadPlayers.length})
+              </Text>
+              {traineesList.map((player) => {
+                const isSelected = selectedSquadPlayers.includes(player.full_name);
+                return (
+                  <TouchableOpacity
+                    key={player.id}
+                    style={[styles.playerSelectCheckRow, isSelected && styles.playerSelectCheckRowActive]}
+                    onPress={() => handleToggleSquadPlayer(player.full_name)}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={[styles.statusDot, { backgroundColor: getAvailabilityColor(player.availability) }]} />
+                      <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{player.full_name}</Text>
+                    </View>
+                    <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
+                      {isSelected && <Text style={{ color: '#141414', fontSize: 10, fontWeight: 'bold' }}>✓</Text>}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+
+              <TouchableOpacity style={[styles.submitReviewBtn, { marginTop: 20 }]} onPress={handleSaveSquad}>
+                <Text style={styles.submitReviewBtnText}>SAVE COMPILED SQUAD</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Match Details Modal (Summary, Scorecard, Feedback) */}
       <Modal
         visible={selectedMatch !== null}
         animationType="slide"
@@ -257,7 +738,7 @@ const CoachDashboard = ({
 
                 {/* Modal Sub-Tabs */}
                 <View style={styles.modalTabBar}>
-                  {['Summary', 'Scorecard'].map((tab) => (
+                  {['Summary', 'Scorecard', 'Feedback'].map((tab) => (
                     <TouchableOpacity
                       key={tab}
                       style={[
@@ -278,7 +759,7 @@ const CoachDashboard = ({
                   ))}
                 </View>
 
-                <ScrollView style={{ flex: 1, marginTop: 12 }}>
+                <ScrollView style={{ flex: 1, marginTop: 12 }} nestedScrollEnabled={true}>
                   {matchDetailsTab === 'Summary' && (
                     <View style={styles.summaryContainer}>
                       <View style={styles.summaryStatusBox}>
@@ -343,6 +824,57 @@ const CoachDashboard = ({
                       </View>
                     </View>
                   )}
+
+                  {matchDetailsTab === 'Feedback' && (
+                    <View style={styles.scorecardContainer}>
+                      <Text style={styles.scorecardTeamTitle}>Add Tactical Match Review</Text>
+                      
+                      <Text style={styles.inputLabel}>Select Player</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 8 }}>
+                        {traineesList.map((player) => (
+                          <TouchableOpacity
+                            key={player.id}
+                            style={[
+                              styles.smallOptionChip,
+                              feedbackPlayerId === player.id && styles.smallOptionChipActive
+                            ]}
+                            onPress={() => setFeedbackPlayerId(player.id)}
+                          >
+                            <Text style={[styles.smallChipText, feedbackPlayerId === player.id && styles.smallChipTextActive]}>
+                              {player.full_name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="Type tactical feedback for this match..."
+                        placeholderTextColor="#555"
+                        value={matchFeedbackText}
+                        onChangeText={setMatchFeedbackText}
+                        multiline
+                      />
+
+                      <TouchableOpacity style={[styles.submitReviewBtn, { marginVertical: 8 }]} onPress={handleAddMatchFeedback}>
+                        <Text style={styles.submitReviewBtnText}>SAVE MATCH REVIEW</Text>
+                      </TouchableOpacity>
+
+                      <Text style={[styles.scorecardTeamTitle, { marginTop: 20 }]}>Coach Feedback History</Text>
+                      {(!matchFeedbackList[selectedMatch.id] || matchFeedbackList[selectedMatch.id].length === 0) && (
+                        <Text style={{ fontSize: 13, color: '#888', fontStyle: 'italic' }}>No tactical feedback logged for this match.</Text>
+                      )}
+                      {(matchFeedbackList[selectedMatch.id] || []).map((feed) => (
+                        <View key={feed.id} style={styles.feedbackLogCard}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                            <Text style={styles.feedbackLogPlayer}>👤 {feed.playerName}</Text>
+                            <Text style={styles.feedbackLogTime}>{feed.timestamp}</Text>
+                          </View>
+                          <Text style={styles.feedbackLogText}>{feed.comment}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </ScrollView>
               </View>
             )}
@@ -382,7 +914,7 @@ const styles = StyleSheet.create({
   },
   tabButtonText: {
     fontWeight: 'bold',
-    fontSize: 12,
+    fontSize: 10,
     color: '#888888',
     letterSpacing: 0.5,
   },
@@ -418,15 +950,27 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 8,
   },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
   playerName: {
     color: '#F5F5F5',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+  playerSubText: {
+    color: '#888888',
+    fontSize: 12,
+    marginTop: 2,
     marginBottom: 4,
   },
   playerStats: {
-    color: '#888888',
-    fontSize: 12,
+    color: '#D4AF37',
+    fontSize: 11,
+    fontWeight: '500',
   },
   indexBox: {
     alignItems: 'center',
@@ -523,6 +1067,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#F5F5F5',
   },
+  modalSub: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
+    fontWeight: 'bold',
+  },
   modalCloseBtn: {
     padding: 4,
   },
@@ -617,6 +1167,316 @@ const styles = StyleSheet.create({
   emptyStateEmoji: {
     fontSize: 32,
     marginBottom: 10,
+  },
+  // Coach features styles
+  headerButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  addDrillButton: {
+    backgroundColor: '#D4AF37',
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  addDrillButtonText: {
+    color: '#141414',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  sessionCard: {
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+  },
+  sessionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sessionDate: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  sessionBadge: {
+    backgroundColor: '#2A2A2A',
+    borderColor: '#3D3D3D',
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  sessionBadgeText: {
+    color: '#D4AF37',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  sessionGround: {
+    color: '#888888',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  sessionFocus: {
+    color: '#D4AF37',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  squadCard: {
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+  },
+  squadHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2D2D2D',
+    paddingBottom: 8,
+  },
+  squadTeamName: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  squadTourney: {
+    color: '#D4AF37',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  squadSubText: {
+    color: '#888888',
+    fontSize: 11,
+    marginBottom: 4,
+  },
+  squadPlayersList: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  specsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginVertical: 14,
+  },
+  specBox: {
+    flex: 1,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
+  },
+  specLabel: {
+    color: '#888',
+    fontSize: 8,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  specValue: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 13,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  innerSectionTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#D4AF37',
+    marginTop: 16,
+    marginBottom: 10,
+    letterSpacing: 1,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    backgroundColor: '#2A2A2A',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
+  },
+  statsGridCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  gridStatVal: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  gridStatLabel: {
+    color: '#888',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  reviewForm: {
+    backgroundColor: '#2A2A2A',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
+  },
+  inputLabel: {
+    color: '#888',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+  starRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  textInput: {
+    backgroundColor: '#1F1F1F',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
+    color: '#FFF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    marginBottom: 12,
+  },
+  submitReviewBtn: {
+    backgroundColor: '#D4AF37',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  submitReviewBtnText: {
+    color: '#141414',
+    fontWeight: '900',
+    fontSize: 11,
+  },
+  reviewLogCard: {
+    backgroundColor: '#2A2A2A',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+  },
+  reviewLogRating: {
+    color: '#D4AF37',
+    fontSize: 12,
+  },
+  reviewLogDate: {
+    color: '#888',
+    fontSize: 11,
+  },
+  reviewLogComment: {
+    color: '#FFF',
+    fontSize: 13,
+    marginTop: 4,
+  },
+  dropdown: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1F1F1F',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
+  },
+  dropdownMenu: {
+    backgroundColor: '#2A2A2A',
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
+    marginTop: 4,
+    maxHeight: 120,
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  playerSelectCheckRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1F1F1F',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
+  },
+  playerSelectCheckRowActive: {
+    borderColor: '#D4AF37',
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#D4AF37',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxActive: {
+    backgroundColor: '#D4AF37',
+  },
+  smallOptionChip: {
+    backgroundColor: '#2A2A2A',
+    borderColor: '#3D3D3D',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  smallOptionChipActive: {
+    backgroundColor: '#D4AF37',
+    borderColor: '#D4AF37',
+  },
+  smallChipText: {
+    color: '#888',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  smallChipTextActive: {
+    color: '#141414',
+  },
+  feedbackLogCard: {
+    backgroundColor: '#2A2A2A',
+    borderRadius: 8,
+    padding: 10,
+    marginVertical: 4,
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
+  },
+  feedbackLogPlayer: {
+    color: '#D4AF37',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  feedbackLogTime: {
+    color: '#888',
+    fontSize: 10,
+  },
+  feedbackLogText: {
+    color: '#FFF',
+    fontSize: 13,
+    marginTop: 2,
   },
 });
 

@@ -90,6 +90,44 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
   const [pendingExtraType, setPendingExtraType] = useState(null);
   const [playerStats, setPlayerStats] = useState({});
 
+  // Scorer Dashboard features state
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [isTimerRunning, setIsTimerRunning] = useState(true);
+  const [fallOfWickets, setFallOfWickets] = useState([]);
+  const [partnershipRuns, setPartnershipRuns] = useState(0);
+  const [partnershipBalls, setPartnershipBalls] = useState(0);
+
+  const [overSummaryModalVisible, setOverSummaryModalVisible] = useState(false);
+  const [lastOverSummary, setLastOverSummary] = useState(null);
+
+  // Match timer loop
+  useEffect(() => {
+    let timer = null;
+    if (setupStep === 'scoring' && isTimerRunning) {
+      timer = setInterval(() => {
+        setElapsedSeconds(prev => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [setupStep, isTimerRunning]);
+
+  const formatTimer = (sec) => {
+    const hrs = Math.floor(sec / 3600);
+    const mins = Math.floor((sec % 3600) / 60);
+    const secs = sec % 60;
+    return `${hrs > 0 ? hrs + ':' : ''}${mins < 10 ? '0' + mins : mins}:${secs < 10 ? '0' + secs : secs}`;
+  };
+
+  const getEstimatedEndTime = () => {
+    const remOvers = totalMaxOvers - (overs + balls / 6);
+    const remMins = Math.ceil(remOvers * 4); // 4 mins per over average
+    const date = new Date();
+    date.setMinutes(date.getMinutes() + remMins);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   // Initialize openers on step change
   useEffect(() => {
     if (setupStep === 'openers') {
@@ -130,8 +168,11 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
         wickets1Score,
         overs1Score,
         playerStats: JSON.parse(JSON.stringify(playerStats)),
+        fallOfWickets: [...fallOfWickets],
+        partnershipRuns,
+        partnershipBalls,
       };
-      return [...prev, newState].slice(-10);
+      return [...prev, newState].slice(-15);
     });
   };
 
@@ -152,12 +193,45 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
     setWickets1Score(lastState.wickets1Score);
     setOvers1Score(lastState.overs1Score);
     setPlayerStats(lastState.playerStats || {});
+    setFallOfWickets(lastState.fallOfWickets || []);
+    setPartnershipRuns(lastState.partnershipRuns || 0);
+    setPartnershipBalls(lastState.partnershipBalls || 0);
 
     setHistoryStack((prev) => prev.slice(0, -1));
 
     const battingTeamLabel = lastState.inningsNum === 1 ? 'team_a' : 'team_b';
     const formattedOvers = parseFloat(`${lastState.overs}.${lastState.balls}`);
     await apiClient.updateLiveScore(matchId, battingTeamLabel, lastState.runs, lastState.wickets, formattedOvers);
+  };
+
+  const handleRevertToState = async (index) => {
+    const targetState = historyStack[index];
+    if (!targetState) return;
+
+    setRuns(targetState.runs);
+    setWickets(targetState.wickets);
+    setOvers(targetState.overs);
+    setBalls(targetState.balls);
+    setCurrentOver(targetState.currentOver);
+    setStriker(targetState.striker);
+    setNonStriker(targetState.nonStriker);
+    setBowler(targetState.bowler);
+    setInningsNum(targetState.inningsNum);
+    setRuns1Score(targetState.runs1Score);
+    setWickets1Score(targetState.wickets1Score);
+    setOvers1Score(targetState.overs1Score);
+    setPlayerStats(targetState.playerStats || {});
+    setFallOfWickets(targetState.fallOfWickets || []);
+    setPartnershipRuns(targetState.partnershipRuns || 0);
+    setPartnershipBalls(targetState.partnershipBalls || 0);
+
+    // Trim stack down to everything before index
+    setHistoryStack((prev) => prev.slice(0, index));
+
+    const battingTeamLabel = targetState.inningsNum === 1 ? 'team_a' : 'team_b';
+    const formattedOvers = parseFloat(`${targetState.overs}.${targetState.balls}`);
+    await apiClient.updateLiveScore(matchId, battingTeamLabel, targetState.runs, targetState.wickets, formattedOvers);
+    alert('Reverted to selected delivery state.');
   };
 
   const persistLiveScore = useCallback(
@@ -173,8 +247,7 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
   const checkInningsStatus = (newRuns, newWickets, finalOvers, finalBalls) => {
     if (inningsNum === 1) {
       if (newWickets === 10 || (finalOvers === totalMaxOvers && finalBalls === 0)) {
-        // AUTOMATIC INNINGS 2 TRANSITION: No manual clicks required
-        console.log('--- 1st Innings finished! Automatically starting 2nd Innings ---');
+        console.log('--- 1st Innings finished! Starting 2nd Innings ---');
         setRuns1Score(newRuns);
         setWickets1Score(newWickets);
         setOvers1Score(parseFloat(`${finalOvers}.${finalBalls}`));
@@ -186,6 +259,8 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
         setOvers(0);
         setBalls(0);
         setCurrentOver([]);
+        setPartnershipRuns(0);
+        setPartnershipBalls(0);
 
         // Get openers for chasing team
         const chasingRoster = battingTeam === hostTeam ? teamBSquad : teamASquad;
@@ -195,7 +270,7 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
         setNonStriker(chasingRoster[1] || 'Chaser B');
         setBowler(defendingRoster[0] || 'Bowler X');
 
-        alert(`Innings 1 Finished at ${newRuns}/${newWickets}. Chasing Target: ${newRuns + 1}. Starting Innings 2!`);
+        alert(`Innings 1 Finished at ${newRuns}/${newWickets}. Target: ${newRuns + 1}. Starting Innings 2!`);
       }
     } else {
       const target = runs1Score + 1;
@@ -217,27 +292,34 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
 
     if (type === 'run') {
       newRuns += value;
+      setPartnershipRuns(prev => prev + value);
     } else if (type === 'wicket') {
       newWickets += 1;
       isWicket = true;
     } else if (type === 'wide') {
       newRuns += 1 + value;
       isLegalDelivery = false;
+      setPartnershipRuns(prev => prev + 1 + value);
     } else if (type === 'noball') {
       newRuns += 1 + value;
       isLegalDelivery = false;
+      setPartnershipRuns(prev => prev + 1 + value);
     } else if (type === 'bye' || type === 'legbye') {
       newRuns += value;
+      setPartnershipRuns(prev => prev + value);
     }
 
     setRuns(newRuns);
     setWickets(newWickets);
 
+    if (isLegalDelivery) {
+      setPartnershipBalls(prev => prev + 1);
+    }
+
     // Update playerStats state
     setPlayerStats((prev) => {
       const next = { ...prev };
       
-      // Initialize striker if not exists
       if (striker) {
         if (!next[striker]) {
           next[striker] = { runs: 0, balls: 0, fours: 0, sixes: 0, ballsConceded: 0, runsConceded: 0, wickets: 0 };
@@ -254,12 +336,10 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
         next[striker] = st;
       }
 
-      // Initialize nonStriker if not exists
       if (nonStriker && !next[nonStriker]) {
         next[nonStriker] = { runs: 0, balls: 0, fours: 0, sixes: 0, ballsConceded: 0, runsConceded: 0, wickets: 0 };
       }
 
-      // Initialize bowler if not exists
       if (bowler) {
         if (!next[bowler]) {
           next[bowler] = { runs: 0, balls: 0, fours: 0, sixes: 0, ballsConceded: 0, runsConceded: 0, wickets: 0 };
@@ -288,14 +368,35 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
 
     if (isLegalDelivery) {
       finalBalls += 1;
-      setCurrentOver((prev) => [...prev, ballMarker]);
+      const updatedOver = [...currentOver, ballMarker];
       if (finalBalls === 6) {
         finalOvers += 1;
         finalBalls = 0;
+        
+        // Sum up over score
+        let overRuns = 0;
+        let overWickets = 0;
+        updatedOver.forEach(b => {
+          if (b === 'W') overWickets += 1;
+          else if (b === 'WD' || b === 'NB') overRuns += 1;
+          else {
+            const r = parseInt(b);
+            if (!isNaN(r)) overRuns += r;
+          }
+        });
+
+        // Trigger over completed popup summary
+        setLastOverSummary({
+          overNum: finalOvers,
+          runsConceded: overRuns,
+          wicketsTaken: overWickets,
+          bowlerName: bowler,
+          deliveries: updatedOver,
+        });
+        setOverSummaryModalVisible(true);
         setCurrentOver([]);
-        if (finalOvers < totalMaxOvers) {
-          setBowlerModalVisible(true); // Choose next bowler for new over
-        }
+      } else {
+        setCurrentOver(updatedOver);
       }
       setOvers(finalOvers);
       setBalls(finalBalls);
@@ -316,9 +417,19 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
     }
 
     if (isWicket) {
+      // Capture Fall of wicket details
+      const wicketLog = {
+        wicketNum: newWickets,
+        batsmanName: striker,
+        score: `${newRuns}/${newWickets}`,
+        overs: `${finalOvers}.${finalBalls}`,
+      };
+      setFallOfWickets(prev => [...prev, wicketLog]);
       setIsWicketSelectorOpen(true);
     } else {
-      checkInningsStatus(newRuns, newWickets, finalOvers, finalBalls);
+      if (finalBalls !== 0) { // If over ended, we check status after over summary confirmation
+        checkInningsStatus(newRuns, newWickets, finalOvers, finalBalls);
+      }
     }
   };
 
@@ -326,6 +437,10 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
     setIsWicketSelectorOpen(false);
     setSelectedFielder('');
     setDismissalType('Bowled');
+
+    // Reset current active partnership runs & balls
+    setPartnershipRuns(0);
+    setPartnershipBalls(0);
 
     if (wickets < 10) {
       setBatsmanModalVisible(true);
@@ -572,6 +687,23 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
         )}
       </View>
 
+      {/* Match Timer Component */}
+      <View style={styles.timerCard}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View>
+            <Text style={styles.timerTitle}>MATCH ELAPSED TIME</Text>
+            <Text style={styles.timerValue}>{formatTimer(elapsedSeconds)}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.timerCtrlBtn}
+            onPress={() => setIsTimerRunning(!isTimerRunning)}
+          >
+            <Text style={styles.timerCtrlText}>{isTimerRunning ? '⏸ PAUSE' : '▶ RESUME'}</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.timerEstText}>ESTIMATED END TIME: {getEstimatedEndTime()}</Text>
+      </View>
+
       {/* Scoreboard display */}
       <View style={styles.scoreboard}>
         <Text style={styles.bigScore}>
@@ -579,6 +711,22 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
         </Text>
         <Text style={styles.oversText}>
           OVERS: {overs}.{balls} <Text style={styles.oversLimit}>/ {totalMaxOvers}</Text>
+        </Text>
+        {inningsNum === 2 && (
+          <Text style={styles.chaseTargetText}>
+            TARGET: {runs1Score + 1} (Need {runs1Score + 1 - runs} runs off {totalMaxOvers * 6 - (overs * 6 + balls)} balls)
+          </Text>
+        )}
+      </View>
+
+      {/* Active partnership tracker widget */}
+      <View style={styles.partnershipCard}>
+        <Text style={styles.partnerHeading}>ACTIVE PARTNERSHIP</Text>
+        <Text style={styles.partnerValue}>
+          {partnershipRuns} Runs <Text style={{ color: '#888', fontWeight: 'normal' }}>off {partnershipBalls} balls</Text>
+        </Text>
+        <Text style={styles.partnerContribText}>
+          Contributors: {striker} ({getBatsmanStats(striker).split(' ')[0]}*) & {nonStriker} ({getBatsmanStats(nonStriker).split(' ')[0]})
         </Text>
       </View>
 
@@ -619,7 +767,7 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
 
       {/* Current Over deliveries */}
       <View style={styles.thisOverCard}>
-        <Text style={styles.thisOverTitle}>THIS OVER:</Text>
+        <Text style={styles.thisOverTitle}>THIS OVER DELIVERIES:</Text>
         <View style={styles.ballsContainer}>
           {currentOver.map((b, i) => (
             <View key={i} style={styles.ballCircle}>
@@ -628,6 +776,44 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
           ))}
           {currentOver.length === 0 && <Text style={{ color: '#888' }}>Waiting for first delivery...</Text>}
         </View>
+      </View>
+
+      {/* Scorecard Editor / Delivery log list */}
+      <View style={styles.thisOverCard}>
+        <Text style={styles.thisOverTitle}>DELIVERY LOG / HISTORIC STATES (TAP TO REVERT):</Text>
+        {historyStack.length === 0 ? (
+          <Text style={{ color: '#888', fontStyle: 'italic', marginTop: 6 }}>No deliveries recorded yet in this session.</Text>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+            {historyStack.map((state, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={styles.deliveryLogChip}
+                onPress={() => handleRevertToState(idx)}
+              >
+                <Text style={styles.deliveryLogText}>
+                  {state.overs}.{state.balls} • {state.runs}/{state.wickets}
+                </Text>
+                <Text style={styles.deliveryLogUndoText}>REVERT ↩</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+
+      {/* Fall of Wickets Log */}
+      <View style={styles.thisOverCard}>
+        <Text style={styles.thisOverTitle}>FALL OF WICKETS LOG:</Text>
+        {fallOfWickets.length === 0 ? (
+          <Text style={{ color: '#888', fontStyle: 'italic', marginTop: 4 }}>No wickets fallen yet.</Text>
+        ) : (
+          fallOfWickets.map((fow) => (
+            <View key={fow.wicketNum} style={styles.fowRow}>
+              <Text style={styles.fowLabel}>Wkt {fow.wicketNum}:</Text>
+              <Text style={styles.fowText}>{fow.batsmanName} ({fow.score}) at {fow.overs} ov</Text>
+            </View>
+          ))
+        )}
       </View>
 
       {/* Scoring Buttons Grid */}
@@ -780,13 +966,41 @@ const ScoringScreen = ({ match, tournaments, apiClient, onBack }) => {
             </View>
             <TextInput
               style={styles.input}
-              placeholder="Fielder Name"
+              placeholder="Fielder Name (Optional)"
               placeholderTextColor="#666"
               value={selectedFielder}
               onChangeText={setSelectedFielder}
             />
             <TouchableOpacity style={styles.confirmBtn} onPress={confirmWicketDismissal}>
               <Text style={styles.confirmBtnText}>CONFIRM WICKET OUT</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL: Over Completed Summary Popup */}
+      <Modal visible={overSummaryModalVisible} transparent={true} animationType="fade">
+        <View style={styles.modalBg}>
+          <View style={styles.wagonWheelCard}>
+            <Text style={styles.modalHeading}>OVER COMPLETED! 🥎</Text>
+            {lastOverSummary && (
+              <View style={{ alignItems: 'center', marginVertical: 10 }}>
+                <Text style={styles.overSummarySubText}>Over Number: {lastOverSummary.overNum}</Text>
+                <Text style={styles.overSummaryBigVal}>
+                  {lastOverSummary.runsConceded} Runs • {lastOverSummary.wicketsTaken} Wkts
+                </Text>
+                <Text style={styles.overSummarySubText}>Bowler: {lastOverSummary.bowlerName}</Text>
+                <View style={[styles.ballsContainer, { marginTop: 12, justifyContent: 'center' }]}>
+                  {lastOverSummary.deliveries.map((b, i) => (
+                    <View key={i} style={[styles.ballCircle, { width: 24, height: 24, borderRadius: 12 }]}>
+                      <Text style={[styles.ballLabel, { fontSize: 9 }]}>{b}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+            <TouchableOpacity style={[styles.confirmBtn, { marginTop: 14 }]} onPress={handleConfirmOverSummary}>
+              <Text style={styles.confirmBtnText}>PROCEED TO NEXT OVER</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1042,6 +1256,13 @@ const styles = StyleSheet.create({
     color: '#888888',
     fontWeight: 'normal',
   },
+  chaseTargetText: {
+    color: '#FFCC00',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginTop: 8,
+    textAlign: 'center',
+  },
   partnershipsCard: {
     backgroundColor: '#1F1F1F',
     borderWidth: 1,
@@ -1073,13 +1294,14 @@ const styles = StyleSheet.create({
     borderColor: '#2D2D2D',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   thisOverTitle: {
-    fontSize: 11,
-    fontWeight: 'bold',
+    fontSize: 10,
+    fontWeight: '900',
     color: '#888888',
     marginBottom: 10,
+    letterSpacing: 1,
   },
   ballsContainer: {
     flexDirection: 'row',
@@ -1314,6 +1536,121 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#888888',
     marginTop: 4,
+  },
+  // Scorer Dash Premium Widget Styles
+  timerCard: {
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  timerTitle: {
+    color: '#888',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  timerValue: {
+    color: '#D4AF37',
+    fontSize: 22,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  timerCtrlBtn: {
+    backgroundColor: '#2A2A2A',
+    borderColor: '#3D3D3D',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  timerCtrlText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  timerEstText: {
+    color: '#888',
+    fontSize: 11,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  partnershipCard: {
+    backgroundColor: '#1F1F1F',
+    borderWidth: 1,
+    borderColor: '#2D2D2D',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  partnerHeading: {
+    color: '#888',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginBottom: 6,
+  },
+  partnerValue: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  partnerContribText: {
+    color: '#D4AF37',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginTop: 6,
+  },
+  fowRow: {
+    flexDirection: 'row',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2A2A',
+  },
+  fowLabel: {
+    color: '#D4AF37',
+    fontWeight: 'bold',
+    width: 50,
+    fontSize: 12,
+  },
+  fowText: {
+    color: '#FFF',
+    fontSize: 12,
+  },
+  deliveryLogChip: {
+    backgroundColor: '#2A2A2A',
+    borderWidth: 1,
+    borderColor: '#3D3D3D',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  deliveryLogText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  deliveryLogUndoText: {
+    color: '#E57373',
+    fontSize: 9,
+    fontWeight: '900',
+    marginTop: 4,
+    letterSpacing: 0.5,
+  },
+  overSummarySubText: {
+    color: '#888',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  overSummaryBigVal: {
+    color: '#D4AF37',
+    fontSize: 22,
+    fontWeight: '900',
+    marginVertical: 6,
   },
 });
 

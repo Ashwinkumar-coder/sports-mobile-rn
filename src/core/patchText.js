@@ -38,40 +38,16 @@ if (OriginalText && OriginalText.render) {
   };
 }
 
-// 2. Override the export for any future imports
-const CustomText = React.forwardRef((props, ref) => {
-  const { style, children, ...rest } = props;
-  const fontFamily = getPoppinsFont(style);
-  return (
-    <OriginalText ref={ref} {...rest} style={[{ fontFamily }, style]}>
-      {children}
-    </OriginalText>
-  );
-});
-
+// 2. Patch TextInput.render just like Text.render
 const OriginalTextInput = RN.TextInput;
-const CustomTextInput = React.forwardRef((props, ref) => {
-  const { style, ...rest } = props;
-  const fontFamily = getPoppinsFont(style);
-  return (
-    <OriginalTextInput ref={ref} {...rest} style={[{ fontFamily }, style]} />
-  );
-});
-
-// Re-assign in exports
-Object.defineProperty(RN, 'Text', {
-  get() {
-    return CustomText;
-  },
-  configurable: true,
-  enumerable: true,
-});
-
-Object.defineProperty(RN, 'TextInput', {
-  get() {
-    return CustomTextInput;
-  },
-  configurable: true,
-  enumerable: true,
-});
-
+if (OriginalTextInput && OriginalTextInput.render) {
+  const originalRenderInput = OriginalTextInput.render;
+  OriginalTextInput.render = function (props, ref) {
+    const fontFamily = getPoppinsFont(props?.style);
+    const newProps = {
+      ...props,
+      style: [{ fontFamily }, props?.style],
+    };
+    return originalRenderInput.call(this, newProps, ref);
+  };
+}

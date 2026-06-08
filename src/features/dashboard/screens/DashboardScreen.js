@@ -240,6 +240,15 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
     </View>
   );
 
+  const TrophyIcon = ({ color }) => (
+    <View style={{ alignItems: 'center', justifyContent: 'center', width: 20, height: 20 }}>
+      <View style={{ width: 16, height: 10, borderWidth: 1.5, borderColor: color, borderTopWidth: 0, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 }} />
+      <View style={{ width: 18, height: 1.5, backgroundColor: color, position: 'absolute', top: 0 }} />
+      <View style={{ width: 4, height: 6, backgroundColor: color }} />
+      <View style={{ width: 10, height: 2, backgroundColor: color }} />
+    </View>
+  );
+
   const renderTabIcon = (tab, isActive) => {
     const color = isActive ? '#D4AF37' : '#888888';
     switch (tab) {
@@ -253,14 +262,22 @@ const DashboardScreen = ({ apiClient, user, onLogout }) => {
         return <UsersIcon color={color} />;
       case 'Sponsorships':
         return <MoneyIcon color={color} />;
+      case 'Tournaments':
+        return <TrophyIcon color={color} />;
+      case 'Teams':
+        return <UsersIcon color={color} />;
+      case 'Sessions':
+        return <CalendarIcon color={color} />;
+      case 'Squads':
+        return <UsersIcon color={color} />;
       default:
         return null;
     }
   };
 
   const getTabsForRole = (role) => {
-    if (role === 'player') return ['Overview', 'Statistics', 'Matches'];
-    if (role === 'coach') return ['Trainees', 'Matches'];
+    if (role === 'player') return ['Overview', 'Statistics', 'Matches', 'Tournaments', 'Teams'];
+    if (role === 'coach') return ['Trainees', 'Matches', 'Sessions', 'Squads'];
     if (role === 'sponsor') return ['Sponsorships', 'Matches'];
     return [];
   };
